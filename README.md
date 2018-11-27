@@ -18,8 +18,8 @@ The original dataset includes 5,197,681 transactions, the grain is one row per h
 
 Links
 --------------------
-Report (html):
+RPubs (knit version): http://rpubs.com/Beth_Hilbert/443311
 
-Code: 
+Code: https://github.com/BethHilbert/r-KrogerCustomerEngagement/blob/master/KrogerCustomerEngagement.Rmd
 
 Note: This is a different project than Kroger Case with which my team won the 84.51 Competition in September 2018. I cannot upload that project to Github as it was live data and proprietary information. 
