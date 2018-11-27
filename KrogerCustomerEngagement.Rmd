@@ -1,0 +1,705 @@
+---
+title: "Kroger Customer Engagement"
+author: "Beth Hilbert"
+date: "`r Sys.Date()`"
+output:
+  html_document
+---
+
+#{.tabset .tabset-fade}
+
+## 1 Introduction
+
+### Problem Statement
+My goal is investigate how promotion affects future customer engagement. Customer engagement will be measured by subsequent purchases of the product. This can quantify the impact of incremental sales by exposure to promotions. 
+
+### Plan
+I will use the Carbo_Loading dataset provided by 84.51. 
+
+
+Two important fields I will use are 'upc' and 'feature_desc'. The  feature description indiates how the product was featured in marketing during a specific week, with options such as front page, back of wrap, etc. 
+
+
+If the product was purchased during a feature, I will look at whether it was previously purchased and whether it was subsequently purchased by that household. 
+
+### Benefit
+The benefit of the analysis will be to see whether certain combinations of products and featured marketing are more effective in engaging customers long term. 
+
+## 2 Packages
+
+### Packages
+
+The following packages are required to reproduce these results: 
+
+```{r load_packages, message = FALSE, warning = FALSE}
+# Load Required Packages
+library(data.table) ## Used to set names without rewriting table
+library(DT) ## Create functional tables in HTML
+library(haven) ## Read statistical software data (original data is stored in SAS files)
+library(tidyverse) ## Collection of R data science packages 
+```
+
+Loading Tidyverse loads a collection of data science packages. From Tidyverse I am using: 
+
+* dplyr to manipulate data  and join tables
+* ggplot2 to visualize 
+* purr for functional programming 
+* stringr to work with strings
+* tidyr for tidying data. 
+
+## 3 Data Preperation {.tabset .tabset-fade}
+
+### 3.1 Load Data
+
+**The first prep step is to understand the source of the data.**  I will use the Carbo_Loading dataset provided by 84.51. The [data](http://uc-r.github.io/data_wrangling/final-project) is a subset of four potentially related product commodities (pasta/sauce, pancake mix/syrup), capturing their sales and weekly promotions. Promotions are identified by location in weekly mailer, location of in-store display, and coupons redeemed. There are 927 products with their associated promotion campaigns over a 2 year period. The data includes 5,197,681 sale transactions with a grain of one row per household per UPC per day. This data set was prepared for classroom projects and case studies to allow students to interact with real-world data. 
+
+
+Because the data is stored in a SAS file format (.sas7bdat), there are a few unique things to consider:
+
+* The data is loaded using the read_sas command from the Haven package. 
+
+* Some variables included attributes which allow them to later be read back into SAS. However these attributes were only included on some of the key fields, which caused errors when joining the tables together. For example the 'upc' variable had attributes in the transactions and weekly tables, but not in product table. I removed the attributes with zap_formats(). 
+
+* SAS encodes nulls as blanks, so nulls are not identifiable with the typical is.na() function and do not show on summary() as missing values. The only nulls in the original datasets (encoded as blank strings) were in the product_size variable. However more nulls were introducted during the join process.
+
+```{r load_data, message = FALSE, warning = FALSE}
+# Load Data
+url <- 'data/transactions.sas7bdat'
+transactions <- read_sas(url)
+transactions <- zap_formats(transactions) 
+
+url <- 'data/product_lookup.sas7bdat'
+product <- read_sas(url)
+product <- zap_formats(product)
+
+url <- 'data/store_lookup.sas7bdat'
+store <- read_sas(url)
+store <- zap_formats(store)
+
+url <- 'data/causal_lookup.sas7bdat'
+weekly <- read_sas(url)
+weekly <- zap_formats(weekly) 
+```
+
+
+### 3.2 Initial Data Structure
+
+**The second prep step is to understand the initial structure of the data.**  The primary table is transactions and there are 3 lookup tables for products, stores, and weekly promotions.
+
+* **Transaction Table** contains a sample of 2 years of carbo related transactions at the household level. The grain of the table is one row per household per UPC per day. There are `r dim(transactions)[1]` transaction rows and `r dim(transactions)[2]` variables. The variables are named: `r names(transactions)`.
+
+* **Product Table** provides detailed product information for each UPC. There are `r dim(product)[1]` product rows and `r dim(product)[2]` variables. The variables are named: `r names(product)`. 
+
+* **Weekly Table** provides weekly promotion activity for each UPC. In the weekly table, there are `r dim(weekly)[1]` UPC weekly promotion rows and `r dim(weekly)[2]` variables. The variables are named: `r names(weekly)`. 
+
+* **Store Table** records each store's zip code. There are `r dim(store)[1]` store rows and `r dim(store)[2]` variables. The variables are named: `r names(store)`. 
+
+
+**Comments on initial data structure:**
+
+* Households are uniquely identified.There are `r transactions %>% group_by(household) %>% n_distinct() ` unique households. 
+
+* Time is recorded by 'time_of_transaction'' expressed as 24 hour clock, 'week' expressed chronologically from 1 to 104, and 'day' expressed from 1 to 728. There is not an actual calendar date, only a relative chronological order of transactions.
+
+* Geography is divided into two large regions encompassing portions of several states.
+
+* Coupon indicates whether a coupon was used with the UPC on that day for that household. 
+
+* Commodity refers to the 4 categories (Pasta, Pasta Sauce, Pancake Mix, Syrup). 
+
+* Feature_desc describes the location of product on a weekly mailer.
+
+* Display_desc describes location of in-store display containing the product.
+
+
+
+```{r glimpse_data, message = FALSE, warning = FALSE}
+glimpse(transactions)
+glimpse(product)
+glimpse(weekly)
+glimpse(store)
+```
+
+
+
+### 3.3 Tidy the Data
+
+**The third prep step is to look at the data.** 
+
+Decisions based on data are dependent on data quality. A large part of time is spent preparing the data ready for analysis. We have to decide which data to gather and what features of the data are important. This step also considers what data is missing an how to create new variables and summaries to reflect these gaps. 
+
+To begin with, I verified the data was stored in a 'tidy' format in which observations are recorded in rows (measure same unit across all attributes with one measurement per row), variables are columns (measure same attribute across observations), and there is one type of observational unit per table. 
+
+I then looked at the values and distributions of each variable using summary(df) and unique(sort(df$var)). I was looking for anything unusual such as variations on spelling, capitalization, missing, or unexpected values. As a result, I made a few changes to the transactions, products and weekly tables. No changes were made to the store table.
+
+```{r initial_summary, include = FALSE, message = FALSE, warning = FALSE }
+# Summary statistics
+summary(transactions)
+summary(product)
+summary(weekly)
+summary(store)
+```
+
+
+```{r initial_unique, include=FALSE, message = FALSE, warning = FALSE}
+# Look at unique values for outliers, formatting, and errors
+unique(sort(transactions$dollar_sales))
+unique(sort(transactions$units))
+unique(sort(transactions$time_of_transaction))
+unique(sort(transactions$geography))
+unique(sort(transactions$household))
+unique(sort(transactions$basket))
+unique(sort(transactions$day))
+unique(sort(transactions$coupon))
+unique(sort(product$product_description))
+unique(sort(product$commodity))
+unique(sort(product$brand))
+unique(sort(product$product_size))
+
+unique(sort(transactions$week))
+unique(sort(weekly$week))
+
+unique(sort(transactions$store))
+unique(sort(weekly$store))
+unique(sort(store$store))
+
+unique(sort(transactions$geography))
+unique(sort(weekly$geography))
+
+unique(sort(weekly$feature_desc))
+unique(sort(weekly$display_desc))
+unique(sort(store$store_zip_code))
+```
+
+
+**Tidying transaction data**
+
+There were a few changes to transaction data:
+
+* time_of_transactions - initially this was chr type, I coerced to integer type so they could be easily compared. I did not use a standard date format because other time related information is recorded chronologically, ignoring calendar date.
+
+* coupon - initially a number type, I coerced to boolean type.
+
+* week is in both transaction table and weekly table. The transaction table weeks range from 1 to 104, but the weekly table starts at week 43. This issue will be discussed in join section. 
+
+
+```{r tidy_transactions, message = FALSE, warning = FALSE}
+# Coerce time and coupon
+transactions <- mutate(transactions, 
+       time_of_transaction = as.numeric(time_of_transaction),
+       coupon = as.logical(coupon))
+```
+
+I evaluated whether the dollar sales were reasonable. The sales ranged from $`r range(transactions$dollar_sales)[1] ` to $`r range(transactions$dollar_sales)[2] ` with a median sale of $`r median(transactions$dollar_sales)`.
+
+
+```{r trans_dollars, include = FALSE, message = FALSE, warning = FALSE}
+# Look closer at transaction$dollar_sales
+negative_dollars <- transactions[transactions$dollar_sales < 0,]
+count_negative_dollars <- count(negative_dollars)
+percent_negative_dollars <- round((count(negative_dollars) / count(transactions))*100, 4)
+
+zero_dollars <- transactions[transactions$dollar_sales == 0,]
+count_zero_dollars <- count(zero_dollars)
+percent_zero_dollars <- round((count(zero_dollars) / count(transactions))*100, 4)
+
+# Evaluate how prevalent negative sales were
+negative_dollars %>%
+  group_by(upc) %>%
+  tally() %>%
+  arrange(desc(n))
+```
+
+* There were `r count_negative_dollars` sales that were negative which represents `r percent_negative_dollars`% of total transactions. I assumed negatives were appropriate as there could be returns. I initially considered removing these rows with negative sales from the data since returning an item would be unaffected by advertising or product placement in the store. But I decided to keep this data to see if some products were frequently returned.
+
+* There were `r count_zero_dollars` sales that were $0 which represents `r percent_zero_dollars`% of total transactions. I kept these rows since sales of $0 could be the result of a promotion.
+
+* There were some dollar values as high as $`r max(transactions$dollar_sales) ` and units as high as `r max(transactions$units) `. I used a boxplot to compare dollar sales to units and determined they were most likely within an expected range (more units purchased resulted in more dollars spent).
+
+
+```{r boxplot_unusual_transactions, message = FALSE, warning = FALSE }
+# Plot potentially unusual transactions
+boxplot(transactions$dollar_sales ~ transactions$units, 
+        main = 'Potentially Unusual Transactions', xlab='units', ylab='dollars')
+```
+
+**Tidying weekly promotion data**
+
+In the weekly promotion data there are `r length(unique(weekly$feature_desc))` types of features and `r length(unique(weekly$display_desc))` types of displays. I coerced both of these to factors. 
+
+* Feature_desc represent ad promotions. I created factor levels with the assumption that items on the advertising wrap are more important than covers, which are more important than not featured items. 
+
+* Display_desc represents in-store promotion location. For display I did not create levels since I did not have information on ordinal levels. So the display factors are arranged by the default which is alphabetically.
+
+```{r tidy_weekly, message = FALSE, warning = FALSE} 
+# Factor feature and display descriptions
+feature_level = c('Wrap Front Feature', 
+                  'Wrap Back Feature', 
+                  'Wrap Interior Feature',
+                  'Front Page Feature', 
+                  'Back Page Feature',
+                  'Interior Page Feature', 
+                  'Interior Page Line Item',
+                  'Not on Feature')
+
+weekly <- mutate(weekly, 
+                  feature_desc = factor(feature_desc, levels = feature_level),
+                  display_desc = factor(display_desc))
+``` 
+
+
+**Tidying product data**
+
+There were a lot of changes needed in the product data.
+
+I renamed and factored the four commodities.
+
+```{r tidy_commodity, message = FALSE, warning = FALSE}
+# Rename and factor commodities
+product <- product %>%
+  mutate(commodity = case_when(
+                                str_detect(commodity, 'pasta sauce') ~ 'SAUCE',
+                                str_detect(commodity, 'pasta') ~ 'PASTA',
+                                str_detect(commodity, 'pancake mixes') ~ 'PANCAKE',
+                                str_detect(commodity, 'syrups') ~ 'SYRUP',
+                                TRUE ~ NA_character_))
+
+commodity_level = c('PASTA', 
+                  'SAUCE', 
+                  'PANCAKE',
+                  'SYRUP')
+
+product <- mutate(product, 
+                  commodity = factor(commodity, levels = commodity_level))
+```
+
+
+I created a variable named 'product_attribute' which identifies a characteristic to group by (such as buttermilk, maple, fettucini). This also cleaned inconsistent product names so that similar products can be compared. 
+
+```{r create_product_attribute, message = FALSE, warning = FALSE}
+# Create variable 'product_attribute' for grouping and renaming descriptions consistently
+product <- product %>%
+  mutate(product_attribute = case_when(
+                                str_detect(product_description, 'BUTTERM') ~ 'BUTTERMILK',
+                                str_detect(product_description, 'BTMK') ~ 'BUTTERMILK',
+                                str_detect(product_description, 'BTRMK') ~ 'BUTTERMILK',
+                                str_detect(product_description, 'BTRMLK') ~ 'BUTTERMILK',
+                                str_detect(product_description, 'MILK') ~ 'BUTTERMILK',
+                                str_detect(product_description, 'MLK') ~ 'BUTTERMILK',
+                                str_detect(product_description, 'LITE') ~ 'LITE',
+                                str_detect(product_description, 'BELG') ~ 'BELGIAN',
+                                str_detect(product_description, 'BUCKWHEAT') ~ 'BUCKWHEAT',
+                                str_detect(product_description, 'BLUEB') ~ 'BERRY',
+                                str_detect(product_description, 'BERRY') ~ 'BERRY',
+                                str_detect(product_description, 'BLUBRY') ~ 'BERRY',
+                                str_detect(product_description, 'MAPLE') ~ 'MAPLE',
+                                str_detect(product_description, 'MPL') ~ 'MAPLE',
+                                str_detect(product_description, 'CORN') ~ 'CORNSYRUP',
+                                str_detect(product_description, 'MOLAS') ~ 'MOLASSES',
+                                str_detect(product_description, 'BLACKSTRA') ~ 'MOLASSES',
+                                str_detect(product_description, 'SORGHUM') ~ 'SORGHUM',
+                                str_detect(product_description, 'SUGAR') ~ 'SUGARFREE',
+                                str_detect(product_description, 'SUGR') ~ 'SUGARFREE',
+                                str_detect(product_description, 'CANE') ~ 'CANE', 
+                                str_detect(product_description, 'MARIN') ~ 'MARINARA',
+                                str_detect(product_description, 'VODKA ') ~ 'VODKA',
+                                str_detect(product_description, 'MEATLESS') ~ 'MEATLESS',
+                                str_detect(product_description, 'MEAT') ~ 'MEAT',
+                                str_detect(product_description, 'SAUSAGE') ~ 'SAUSAGE',
+                                str_detect(product_description, 'SAUS ') ~ 'SAUSAGE',
+                                str_detect(product_description, 'SAUS/') ~ 'SAUSAGE',
+                                str_detect(product_description, 'SAUSG') ~ 'SAUSAGE',
+                                str_detect(product_description, 'ALFREDO') ~ 'ALFREDO',
+                                str_detect(product_description, 'ALFEDO') ~ 'ALFREDO',
+                                str_detect(product_description, 'ALFRDO') ~ 'ALFREDO',
+                                str_detect(product_description, 'PUTTAN') ~ 'PUTTANESCA',
+                                str_detect(product_description, 'PESTO') ~ 'PESTO',
+                                str_detect(product_description, 'MSHRM') ~ 'MUSHROOM',
+                                str_detect(product_description, 'MUSH') ~ 'MUSHROOM',
+                                str_detect(product_description, 'MUSRM') ~ 'MUSHROOM',
+                                str_detect(product_description, 'MSHR') ~ 'MUSHROOM',
+                                str_detect(product_description, 'CLAM') ~ 'CLAM', 
+                                str_detect(product_description, 'VEG') ~ 'VEG',
+                                str_detect(product_description, 'GARDEN') ~ 'VEG',
+                                str_detect(product_description, 'GRDN') ~ 'VEG',
+                                str_detect(product_description, 'ONION') ~ 'VEG',
+                                str_detect(product_description, 'ARTICHOKE') ~ 'VEG',
+                                str_detect(product_description, 'EGGPLANT') ~ 'VEG',
+                                str_detect(product_description, 'OLIVE') ~ 'VEG',
+                                str_detect(product_description, 'TOM') ~ 'VEG',
+                                str_detect(product_description, 'CHEESE') ~ 'CHEESE',
+                                str_detect(product_description, 'PARM') ~ 'CHEESE',
+                                str_detect(product_description, 'CHEDDAR') ~ 'CHEESE',
+                                str_detect(product_description, 'CHDR') ~ 'CHEESE',
+                                str_detect(product_description, 'FET') ~ 'FETTUCINI',
+                                str_detect(product_description, 'EGG ') ~ 'EGG',
+                                str_detect(product_description, 'ANGEL') ~ 'ANGEL',
+                                str_detect(product_description, 'ROTI') ~ 'ROTINI',
+                                str_detect(product_description, 'LASA') ~ 'LASAGNA',
+                                str_detect(product_description, 'ELBO') ~ 'ELBOW',
+                                str_detect(product_description, 'MACARON') ~ 'ELBOW',
+                                str_detect(product_description, 'MANI') ~ 'MANICOTTI',
+                                str_detect(product_description, 'ORZO') ~ 'ORZO',
+                                str_detect(product_description, 'CAPE') ~ 'CAPELLINI',
+                                str_detect(product_description, 'NACH') ~ 'SPINACH',
+                                str_detect(product_description, 'BOW') ~ 'BOWTIE',
+                                str_detect(product_description, 'VERMI') ~ 'VERMICELLI',
+                                str_detect(product_description, 'GNOC') ~ 'GNOCCHI',
+                                str_detect(product_description, 'ZIT') ~ 'ZITI',
+                                str_detect(product_description, 'FAR') ~ 'FARFALLE',
+                                str_detect(product_description, 'TORT') ~ 'TORTELLINI',           
+                                str_detect(product_description, 'ROTE') ~ 'ROTELLE',
+                                str_detect(product_description, 'MOSTA') ~ 'MOSTACCIOLI',
+                                str_detect(product_description, 'ALPHA') ~ 'ALPHABET',
+                                str_detect(product_description, 'RIGAT') ~ 'RIGATONI',
+                                str_detect(product_description, 'SHELL') ~ 'SHELLS',
+                                str_detect(product_description, 'PENNE') ~ 'PENNE',
+                                str_detect(product_description, 'LIN')
+                                   & commodity == 'PASTA' ~ 'LINGUINI',
+                                str_detect(product_description, 'THIN') ~ 'THIN',
+                                str_detect(product_description, 'SPAG') 
+                                    & commodity=='PASTA'  ~ 'SPAGHETTI',
+                                TRUE ~ 'OTHER' ))
+
+product <- product %>%
+                  select('product_description', 'product_attribute', 'product_size', everything())
+```
+
+
+For product_size, I removed spaces, recalculated all values to ounces for comparison purposes, cleaned up labels/values, and coerced the final results to numeric. Initially there were `r length(unique(product$product_size))` different values for product sizes.
+
+
+```{r initial_product_size, message = FALSE, warning = FALSE}
+# Initial product_size values
+unique(sort(product$product_size))
+```
+
+```{r tidy_product_size, message = FALSE, warning = FALSE} 
+# Tidying product$product_size
+product <- mutate(product, 
+           
+           # remove spaces
+           product_size = str_replace_all(product_size, ' ', ''),
+           
+           # Convert pounds to ounces           
+           product_size = str_replace(product_size, '1LB', '16'),
+           product_size = str_replace(product_size, '2LB', '36'),
+           product_size = str_replace(product_size, '3LB', '48'),
+           product_size = str_replace(product_size, '4LB', '64'),
+           product_size = str_replace(product_size, '6LB11OZ', '26'), #Ragu Trad Spaghetti
+           product_size = str_replace(product_size, 'GAL', '16'),
+           product_size = str_replace(product_size, 'P 1 LB ', '16'),
+           product_size = str_replace(product_size, 'N 1 LB', '16'),
+           product_size = str_replace(product_size, '1.5LB', '24'),
+           
+           # Clean Up these sizes
+           product_size = str_replace(product_size,'KH#13384', '16'),
+           product_size = str_replace(product_size,'KH#18277', '8'),
+           product_size = str_replace(product_size,'KH#18280', '8'),
+           product_size = str_replace(product_size,'KH#18283', '8'),
+           product_size = str_replace(product_size,'KH#20749', '16'),
+           product_size = str_replace(product_size,'KH#2793', '12'),
+           product_size = str_replace(product_size,'KH#39724', '8'),
+           product_size = str_replace(product_size,'KH#58442', '24'),
+           product_size = str_replace(product_size,'KH#61779', '24'),
+           product_size = str_replace(product_size,'KH#61780', '24'),
+           product_size = str_replace(product_size,'KH#68255', '3'),
+           product_size = str_replace(product_size,'KH#6862', '16'),
+           product_size = str_replace(product_size,'KH#69333', '12'),
+           product_size = str_replace(product_size,'KH#71916', '26'),
+           product_size = str_replace(product_size,'KH#8525', '16'),
+           product_size = str_replace(product_size,'KH#8623', '16'),
+           product_size = str_replace(product_size,'KH#8627', '16'),
+           product_size = str_replace(product_size,'KH#8651', '16'),
+           product_size = str_replace(product_size,'KH#8652', '16'),
+           product_size = str_replace(product_size,'%KH#29483', '26'),
+           product_size = str_replace(product_size,'%KH#9390', '7'),
+           product_size = str_replace(product_size,'NOTAG', '16'),
+           product_size = str_replace(product_size,'##########', ''),
+           product_size = str_replace(product_size,'CUSTREQST', '12'),
+           product_size = str_replace(product_size, '61/2OZ', '6.5'),
+           product_size = str_replace(product_size, '311/2OZ', '31.5'),
+           
+           # Remove these units codes
+           product_size = str_replace(product_size, 'OUNCE', ''),
+           product_size = str_replace(product_size, 'OZ', ''),
+           product_size = str_replace(product_size, '0Z', ''),
+           product_size = str_replace(product_size, 'Z', ''),
+           product_size = str_replace(product_size, 'FL', ''),
+           product_size = str_replace(product_size, 'FMLY', ''),
+           product_size = str_replace(product_size, 'PET', ''),
+           product_size = str_replace(product_size, 'CR', ''),
+           product_size = str_replace(product_size, 'NOTAG', ''),     
+           product_size = str_replace(product_size, 'N', ''),
+           product_size = str_replace(product_size, 'P', ''),
+           product_size = str_replace(product_size, 'SO', ''))
+
+# SAS encodes nulls as blanks, fill in blanks with 16 (most common)
+product$product_size[product$product_size == ''] <- '16'
+
+# Coerce to numeric
+product <- mutate(product, 
+       product_size = as.numeric(product$product_size))
+``` 
+
+I then created a new variable called 'product_size_factor' to represent the relative size of products in each commodity. Because the product sizes are now numeric, I was can calculate the median and IQR for each commodity.  
+
+```{r determine_size_splits, message = FALSE, warning = FALSE}
+# Determine appropriate splits for product_size groups
+commodity_split <- split(product, f = product$commodity)
+pasta_df <- data.frame(commodity_split[1])
+sauce_df <- data.frame(commodity_split[2])
+pancake_df <- data.frame(commodity_split[3])
+syrup_df <- data.frame(commodity_split[4])
+
+# Summary statistics for product sizes
+size_stats <- map(c(pasta_df, sauce_df, pancake_df, syrup_df), summary, na.rm=TRUE)
+size_stats[c(3,10,17, 24)] #print only product_size stats
+```
+
+```{r code_checking_commodity_sizes, include = FALSE, message = FALSE, warning = FALSE}
+# Count instance of each product size by commodity
+product %>%
+  group_by(commodity, product_size) %>%
+  tally()
+```
+
+
+```{r assign_size_label, message = FALSE, warning = FALSE}
+# Create variable 'product_size_factor'
+PASTA_SMALL <-9
+PASTA_REGULAR <-17
+SAUCE_SMALL <- 12
+SAUCE_REGULAR <-26
+PANCAKE_SMALL <-10
+PANCAKE_REGULAR <-20
+SYRUP_SMALL <- 16
+SYRUP_REGULAR <-24
+
+product <- product %>%
+  mutate(product_size_factor = case_when(
+        commodity == 'PASTA' & product_size <= PASTA_SMALL ~ 'SMALL',
+        commodity == 'PASTA' & product_size <= PASTA_REGULAR~ 'REGULAR',
+        commodity == 'PASTA' ~ 'JUMBO',
+        commodity == 'SAUCE' & product_size <= SAUCE_SMALL ~ 'SMALL',
+        commodity == 'SAUCE' & product_size <= SAUCE_REGULAR ~ 'REGULAR',
+        commodity == 'SAUCE' ~ 'JUMBO',
+        commodity == 'PANCAKE' & product_size <= PANCAKE_SMALL ~ 'SMALL',
+        commodity == 'PANCAKE' & product_size <= PANCAKE_REGULAR ~ 'REGULAR',
+        commodity == 'PANCAKE' ~ 'JUMBO',
+        commodity == 'SYRUP' & product_size <= SYRUP_SMALL ~ 'SMALL',
+        commodity == 'SYRUP' & product_size <= SYRUP_REGULAR ~ 'REGULAR',
+        commodity == 'SYRUP' ~ 'JUMBO',
+        TRUE ~ 'OTHER' ))
+
+size_level = c('SMALL', 
+               'REGULAR', 
+               'JUMBO')
+product <- mutate(product, 
+                  product_size_factor = factor(product_size_factor, levels = size_level))
+
+```
+I used these statistics, counts of product size, and my domain knowledge to determine appropriate cut off values for 'small', 'regular', and 'jumbo' in each commodity type. The cutoffs I assigned are:
+
+* For Pasta:  `r PASTA_SMALL ` and `r PASTA_REGULAR`
+
+* for Sauce:  `r SAUCE_SMALL ` and `r SAUCE_REGULAR`
+
+* for Pancake:  `r PANCAKE_SMALL ` and `r PANCAKE_REGULAR`
+
+* for Syrup:  `r SYRUP_SMALL ` and `r SYRUP_REGULAR`
+
+
+```{r product_size_contingency_table, message = FALSE, warning = FALSE}
+# Product_size_factor counts
+table(product$product_size_factor, product$commodity) %>%
+  addmargins()
+
+# Product_size_factor proportions
+round(table(product$product_size_factor, product$commodity) %>%
+  prop.table(margin = 2), 2)
+```
+
+
+
+The final version of cleaned product table (included because there were a lot of changes): 
+
+```{r cleaned_prod_table, echo = FALSE, message = FALSE, warning = FALSE}
+# Cleaned product data
+product_print <- product %>% 
+  select(upc, commodity, product_attribute, brand, product_description, product_size, product_size_factor, everything()) %>%
+  arrange(desc(commodity), upc)
+datatable(product_print)
+```
+
+
+
+### 3.4 Join Tables
+
+**Determine possible issues with tables before joining**
+
+Transactions and Products are joined using 'upc'
+
+* There are `r transactions %>% anti_join(product) %>% tally()` transactions which are not associated with a product and will result in NA in the product information when they are joined. I will not keep these unmatched transactions as they do not add value to my analysis on products/promotion links.
+
+* There are `r product %>% anti_join(transactions) %>% tally()` products which are not associated with a transaction. I will ignore these products (this will happen automatically by the join used). 
+
+
+Transactions and Weekly are joined using 'upc', 'week', 'store', and 'geography'
+
+* There are `r transactions %>% anti_join(weekly) %>% tally()` transactions which are not associated with a weekly observation. Many of these are because promotion information was not recorded before week 43 which is 40% of the time period. After the join, there will be missing values for feature_desc and display_desc in these rows. Because Weekly promotions were not collected before week 43, I will assign 'Pre-Collection' to those missing values. But for weeks after that I will assign 'Unknown' to missing values. While these missing values after week 42 may reflect there were not any promotions for that UPC, I did not make that assumption because there is already a category called 'Not On Feature'. 
+
+* There are `r weekly %>% anti_join(transactions) %>% tally()` weekly observations which are not associated with a transaction. I will ignore these weeks (automatically by the format of the join).
+
+
+Transactions and Store are joined using 'store'
+
+* There are `r transactions %>% anti_join(store) %>% tally()` transactions which are not associated with a store. 
+
+* There are `r store %>% anti_join(transactions) %>% tally()` stores which are not associated with a transaction. 
+
+
+**Join**
+
+```{r join_tables, message = FALSE, warning = FALSE}
+# Join Tables
+carbo_clean <- transactions %>%
+          inner_join(product, by = 'upc')  %>%
+          left_join(weekly, by = c('upc', 'week', 'store', 'geography')) %>%
+          left_join(store, by = 'store') %>%
+          arrange(household, day, upc)
+```
+
+**Clean after joining**
+
+I renamed columns to be clear, shorter, and consistent. 
+
+```{r rename_clean, message = FALSE, warning = FALSE}
+# Rename columns to be clear and consistent
+setnames(carbo_clean, 
+         old = c('units', 'time_of_transaction', 'product_description',
+                 'product_size', 'store_zip_code'), 
+         new = c('quantity', 'time', 'product_desc', 'ounces', 'store_zip'))
+```
+
+
+```{r, include = FALSE}
+# Used in in development so I don't have to keep recreating the dataset from the start
+carbo_backup <- carbo_clean
+```
+
+```{r, include = FALSE}
+# Used in in development so I don't have to keep recreating the dataset from the start
+carbo_clean <- carbo_backup
+```
+
+After the join, there are missing values for feature_desc and display_desc which I will fill in with 'Pre-Collection' and 'Unknown'. Implementing this involves saving the current factor level, converting the column to character, assigning the new values where there were missing values, then refactoring the column.
+
+```{r adjust_feature_display_factors, message = FALSE, warning = FALSE }
+# Missing values as a result of transaciton and weekly join
+
+# Preserve feature levels
+feature_levels <- c(levels(carbo_clean$feature_desc), 'Pre-Collection', 'Unknown')
+display_levels <- c(levels(carbo_clean$display_desc), 'Pre-Collection', 'Unknown')
+
+# Convert to character
+carbo_clean$feature_desc <- as.character(carbo_clean$feature_desc)
+carbo_clean$display_desc <- as.character(carbo_clean$display_desc)
+
+# Code values before and after week 43
+carbo_clean$feature_desc <- ifelse(carbo_clean$week < 43, 
+                                   'Pre-Collection',
+                                   carbo_clean$feature_desc)
+carbo_clean$feature_desc <- ifelse(carbo_clean$week >= 43 & is.na(carbo_clean$feature_desc), 
+                                   'Unknown',
+                                   carbo_clean$feature_desc)
+carbo_clean$display_desc <- ifelse(carbo_clean$week < 43, 
+                                   'Pre-Collection',
+                                   carbo_clean$display_desc)
+carbo_clean$display_desc <- ifelse(carbo_clean$week >= 43 & is.na(carbo_clean$display_desc), 
+                                   'Unknown',
+                                   carbo_clean$display_desc)
+
+# Refactor with new levels
+carbo_clean <- mutate(carbo_clean, 
+                  feature_desc = factor(feature_desc, levels = feature_levels),
+                  display_desc = factor(display_desc, levels = display_levels))
+```
+
+
+```{r missing_val_check, include = FALSE, message = FALSE, warning = FALSE}
+# Verify there are no more missing values
+colSums(is.na(carbo_clean))
+```
+
+
+I reordered the columns. 
+ 
+```{r reorder_columns_clean, message = FALSE, warning = FALSE}
+# Reorder columns
+carbo_clean <- carbo_clean %>%
+  select(household, week, feature_desc, display_desc, commodity, brand, product_attribute, 
+         ounces, product_size_factor, upc, product_desc, coupon, quantity, dollar_sales, 
+         day, time, basket, everything())
+```
+
+
+### 3.5 Summary of Cleaned Data
+
+In the cleaned data set, each observation is a household's UPC from a specific day. This cleaned data set contains `r dim(carbo_clean)[1]` observations and `r dim(carbo_clean)[2]` variables.
+
+**The key variables I will be looking at are:**
+
+* **commodity** - which has 4 values: `r unique(sort(carbo_clean$commodity))`
+
+* **feature_desc** - which is a factor with 8 ordered levels: `r levels(carbo_clean$feature_desc)`
+
+* **product_desc** - which is the name of the products. There are `r length(unique(carbo_clean$product_desc))` different products.
+
+* **household** - there are `r length(unique(carbo_clean$household))` unique households. 
+
+```{r glimpse_clean, echo=FALSE, message = FALSE, warning = FALSE}
+glimpse(carbo_clean)
+```
+
+**The first 500 sorted observations**
+
+```{r, datatable_clean, echo=FALSE, message = FALSE, warning = FALSE}
+# First 500 rows of the cleaned data
+datatable(head(carbo_clean, 500))
+```
+
+
+## 4 Exploratory Data Analysis
+
+### Exploratory Plan
+
+This step combines visualization with transformation to ask and answer interesting questions about the data. Data exploration is the art of looking at your data with goal of understanding the data. We calculate statistics and make visuals to find trends, anomalies, patterns, or relationships among the data.
+
+I plan to slice the joined table in ways that will show households that have and haven't responded to featured advertising. I will evaluate whether these households had previously purchased the product and subsequently purchased the product. I can also look at whether they had purchased a similar product, but switched to a featured product.
+
+Most of the variables I will create will be the result of grouping/aggregations. Some of these might be counts of products marketed, counts of products purchased, percent change in sales between weeks, and counts by binned product size. 
+
+Some graphs I could create are line charts comparing commodities on the weeks there are campaigns, the weeks before, and the weeks after. I could create histogram of overall counts of how often campaigns are used for different commodities. 
+
+
+### Modeling
+
+Modeling is capturing patterns from data, this is referred to as fitting (or training) a model. For supervised learning training we provide the model with features (variables describing situation) and a label (what we want to predict). The model learns a mapping from the features to the label. After it has been fit, you can apply the model to a new batch of data to predict the label. 
+
+## 5 Summary
+
+
+### Business Question Addressed
+
+Summarize problem statement address. How addressed (methodology) 
+
+### Interesting Insights
+
+
+### Implications
+
+
+### Limitations
+
+An extension of this analysis could include the impact of additional ways of engaging with customers, such as through other Kroger marketing channels and digital ads across the web. Another extension could look at the specifics of coupons redeemed as to whether they were a result of customer specific mailers, general vendor coupons (such as from the Sunday paper), or digital coupons from the Kroger app. 
