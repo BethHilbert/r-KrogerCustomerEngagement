@@ -1,6 +1,6 @@
 # Kroger Customer Engagement
 
-To analyse how promotion affects future customer engagement. Customer engagement will be measured by subsequent purchases of the product. I am using R and a dataset provided by 84.51. November 2018. 
+To analyze how promotion affects future customer engagement. Customer engagement will be measured by subsequent purchases of the product. I am using R and a dataset provided by 84.51. November 2018. 
 
 This project is in process and will be finished December 2018. 
 
@@ -23,4 +23,3 @@ Report (html):
 Code: 
 
 Note: This is a different project than Kroger Case with which my team won the 84.51 Competition in September 2018. I cannot upload that project to Github as it was live data and proprietary information. 
-# r-KrogerCustomerEngagement
