@@ -1,5 +1,5 @@
 ---
-title: "Kroger Customer Engagement"
+title: "Marketing's Effect on Customer Engagement"
 author: "Beth Hilbert"
 date: "`r Sys.Date()`"
 output:
@@ -10,7 +10,7 @@ output:
 
 ## 1 Introduction
 
-### Problem Statement
+### Business Question
 My goal is investigate how promotion affects future customer engagement. Customer engagement will be measured by subsequent purchases of the product. This can quantify the impact of incremental sales by exposure to promotions. 
 
 ### Plan
@@ -43,7 +43,7 @@ Loading Tidyverse loads a collection of data science packages. From Tidyverse I 
 
 * dplyr to manipulate data  and join tables
 * ggplot2 to visualize 
-* purr for functional programming 
+* purrr for functional programming 
 * stringr to work with strings
 * tidyr for tidying data. 
 
@@ -62,23 +62,27 @@ Because the data is stored in a SAS file format (.sas7bdat), there are a few uni
 
 * SAS encodes nulls as blanks, so nulls are not identifiable with the typical is.na() function and do not show on summary() as missing values. The only nulls in the original datasets (encoded as blank strings) were in the product_size variable. However more nulls were introducted during the join process.
 
-```{r load_data, message = FALSE, warning = FALSE}
-# Load Data
-url <- 'data/transactions.sas7bdat'
-transactions <- read_sas(url)
-transactions <- zap_formats(transactions) 
 
-url <- 'data/product_lookup.sas7bdat'
-product <- read_sas(url)
-product <- zap_formats(product)
+```{r load_data, message = FALSE, warning = FALSE }
+# load data
+files <- c('causal_lookup','product_lookup', 'store_lookup', 'transactions')
+df_names <- c('weekly', 'product', 'store', 'transactions')
 
-url <- 'data/store_lookup.sas7bdat'
-store <- read_sas(url)
-store <- zap_formats(store)
+for (i in seq_along(files)) {
+  #create file path
+  full_path <- paste0("data/",files[i], '.sas7bdat')
 
-url <- 'data/causal_lookup.sas7bdat'
-weekly <- read_sas(url)
-weekly <- zap_formats(weekly) 
+  #import data
+  if (file.exists(full_path)) {
+   df <- read_sas(full_path)
+   assign(df_names[i],df)
+   df_names[i] <- zap_formats(df_names[i]) 
+   rm(df)
+  } else {
+    response <- paste("There is no file with the name", full_path)
+    print(response)
+  }
+}
 ```
 
 
@@ -97,13 +101,13 @@ weekly <- zap_formats(weekly)
 
 **Comments on initial data structure:**
 
-* Households are uniquely identified.There are `r transactions %>% group_by(household) %>% n_distinct() ` unique households. 
+* Households are uniquely identified.
 
 * Time is recorded by 'time_of_transaction'' expressed as 24 hour clock, 'week' expressed chronologically from 1 to 104, and 'day' expressed from 1 to 728. There is not an actual calendar date, only a relative chronological order of transactions.
 
 * Geography is divided into two large regions encompassing portions of several states.
 
-* Coupon indicates whether a coupon was used with the UPC on that day for that household. 
+* Coupon indicates whether a coupon was used with the UPC on that day for that household.  
 
 * Commodity refers to the 4 categories (Pasta, Pasta Sauce, Pancake Mix, Syrup). 
 
@@ -112,88 +116,36 @@ weekly <- zap_formats(weekly)
 * Display_desc describes location of in-store display containing the product.
 
 
-
 ```{r glimpse_data, message = FALSE, warning = FALSE}
-glimpse(transactions)
-glimpse(product)
-glimpse(weekly)
-glimpse(store)
+for (i in seq_along(df_names)) {
+  print(df_names[i])
+  glimpse(get(df_names[i]))
+}
 ```
-
 
 
 ### 3.3 Tidy the Data
 
 **The third prep step is to look at the data.** 
 
-Decisions based on data are dependent on data quality. A large part of time is spent preparing the data ready for analysis. We have to decide which data to gather and what features of the data are important. This step also considers what data is missing an how to create new variables and summaries to reflect these gaps. 
+Decisions based on data are dependent on data quality. A large part of time is spent preparing the data for analysis. We have to decide which data to gather and what features of the data are important. This step also considers what data is missing and how to create new variables and summaries to reflect these gaps. 
 
 To begin with, I verified the data was stored in a 'tidy' format in which observations are recorded in rows (measure same unit across all attributes with one measurement per row), variables are columns (measure same attribute across observations), and there is one type of observational unit per table. 
 
 I then looked at the values and distributions of each variable using summary(df) and unique(sort(df$var)). I was looking for anything unusual such as variations on spelling, capitalization, missing, or unexpected values. As a result, I made a few changes to the transactions, products and weekly tables. No changes were made to the store table.
 
-```{r initial_summary, include = FALSE, message = FALSE, warning = FALSE }
-# Summary statistics
-summary(transactions)
-summary(product)
-summary(weekly)
-summary(store)
-```
-
-
-```{r initial_unique, include=FALSE, message = FALSE, warning = FALSE}
-# Look at unique values for outliers, formatting, and errors
-unique(sort(transactions$dollar_sales))
-unique(sort(transactions$units))
-unique(sort(transactions$time_of_transaction))
-unique(sort(transactions$geography))
-unique(sort(transactions$household))
-unique(sort(transactions$basket))
-unique(sort(transactions$day))
-unique(sort(transactions$coupon))
-unique(sort(product$product_description))
-unique(sort(product$commodity))
-unique(sort(product$brand))
-unique(sort(product$product_size))
-
-unique(sort(transactions$week))
-unique(sort(weekly$week))
-
-unique(sort(transactions$store))
-unique(sort(weekly$store))
-unique(sort(store$store))
-
-unique(sort(transactions$geography))
-unique(sort(weekly$geography))
-
-unique(sort(weekly$feature_desc))
-unique(sort(weekly$display_desc))
-unique(sort(store$store_zip_code))
-```
-
 
 **Tidying transaction data**
 
-There were a few changes to transaction data:
+I looked at the general distribution of the transaction data. There are `r n_distinct(transactions$household) ` unique households. There is an average of `r round((n_distinct(transactions$basket) / n_distinct(transactions$household)),2) ` baskets per household over the 2 year period. This seems like a very small number of grocery trips. This is indicative to me that when the data was sampled, the focus was not on preserving transactions for an entire household. Because of this, I determined the data would not support analyzing a specific customers response to a campaign. So I changed the grain of my review from looking at transactions by individual households to looking at products.  
 
-* time_of_transactions - initially this was chr type, I coerced to integer type so they could be easily compared. I did not use a standard date format because other time related information is recorded chronologically, ignoring calendar date.
-
-* coupon - initially a number type, I coerced to boolean type.
-
-* week is in both transaction table and weekly table. The transaction table weeks range from 1 to 104, but the weekly table starts at week 43. This issue will be discussed in join section. 
+Coupons were used on products in `r round(mean(transactions$coupon)*100,2) ` % of the transactions. I do not know the industry standard, but it seems reasonable.
 
 
-```{r tidy_transactions, message = FALSE, warning = FALSE}
-# Coerce time and coupon
-transactions <- mutate(transactions, 
-       time_of_transaction = as.numeric(time_of_transaction),
-       coupon = as.logical(coupon))
-```
-
-I evaluated whether the dollar sales were reasonable. The sales ranged from $`r range(transactions$dollar_sales)[1] ` to $`r range(transactions$dollar_sales)[2] ` with a median sale of $`r median(transactions$dollar_sales)`.
+I then evaluated whether the dollar sales were reasonable. The sales ranged from $`r range(transactions$dollar_sales)[1] ` to $`r range(transactions$dollar_sales)[2] ` with a median sale of $`r median(transactions$dollar_sales)`.
 
 
-```{r trans_dollars, include = FALSE, message = FALSE, warning = FALSE}
+```{r trans_dollars, results= FALSE, message = FALSE, warning = FALSE, errors = FALSE}
 # Look closer at transaction$dollar_sales
 negative_dollars <- transactions[transactions$dollar_sales < 0,]
 count_negative_dollars <- count(negative_dollars)
@@ -203,7 +155,7 @@ zero_dollars <- transactions[transactions$dollar_sales == 0,]
 count_zero_dollars <- count(zero_dollars)
 percent_zero_dollars <- round((count(zero_dollars) / count(transactions))*100, 4)
 
-# Evaluate how prevalent negative sales were
+# Evaluate how prevalent negative sales are
 negative_dollars %>%
   group_by(upc) %>%
   tally() %>%
@@ -216,12 +168,34 @@ negative_dollars %>%
 
 * There were some dollar values as high as $`r max(transactions$dollar_sales) ` and units as high as `r max(transactions$units) `. I used a boxplot to compare dollar sales to units and determined they were most likely within an expected range (more units purchased resulted in more dollars spent).
 
+```{r message = FALSE, warning = FALSE, errors = FALSE}
+#clean environment
+remove_objects <- c('negative_dollars', 'count_negative_dollars', 'percent_negative_dollars', 
+                  'zero_dollars', 'count_zero_dollars', 'percent_zero_dollars' )
+rm(list = ls()[ls() %in% remove_objects])
+```
+
+
 
 ```{r boxplot_unusual_transactions, message = FALSE, warning = FALSE }
 # Plot potentially unusual transactions
 boxplot(transactions$dollar_sales ~ transactions$units, 
-        main = 'Potentially Unusual Transactions', xlab='units', ylab='dollars')
+        main = 'Potentially Unusual Transactions', xlab='Quantity', ylab = "Dollars")
 ```
+
+There were a few changes to transaction dataframe:
+
+* time_of_transactions - initially this was chr type, I coerced to integer type so they could be easily compared. I did not use a standard date format because other time related information is recorded chronologically, ignoring calendar date.
+
+* week is in both transaction table and weekly table. The transaction table weeks range from 1 to 104, but the weekly table starts at week 43. I decided to keep al the transaction data instead of just the overlapping data, and my reasons will be discussed in the join section. 
+
+
+```{r tidy_transactions, message = FALSE, warning = FALSE}
+# Coerce time and coupon
+transactions <- mutate(transactions, 
+       time_of_transaction = as.numeric(time_of_transaction))
+```
+
 
 **Tidying weekly promotion data**
 
@@ -229,22 +203,38 @@ In the weekly promotion data there are `r length(unique(weekly$feature_desc))` t
 
 * Feature_desc represent ad promotions. I created factor levels with the assumption that items on the advertising wrap are more important than covers, which are more important than not featured items. 
 
-* Display_desc represents in-store promotion location. For display I did not create levels since I did not have information on ordinal levels. So the display factors are arranged by the default which is alphabetically.
+* Display_desc represents in-store promotion location. For display I created factor levels with the assumption that End Caps are better than aisles, and front of store is better than rear.
 
 ```{r tidy_weekly, message = FALSE, warning = FALSE} 
 # Factor feature and display descriptions
-feature_level = c('Wrap Front Feature', 
+feature_levels = c('Wrap Front Feature', 
                   'Wrap Back Feature', 
                   'Wrap Interior Feature',
                   'Front Page Feature', 
                   'Back Page Feature',
                   'Interior Page Feature', 
                   'Interior Page Line Item',
-                  'Not on Feature')
+                  'Not on Feature',
+                  'Unknown',
+                  'Pre-Collection')
+
+display_levels = c('Store Front',
+                  'Front End Cap',
+                  'Side-Aisle End Cap',
+                  'Promo/Seasonal Aisle',
+                  'Secondary Location Display',
+                  'Rear End Cap',
+                  'Store Rear',
+                  'Mid-Aisle End Cap',
+                  'In-Aisle',
+                  'In-Shelf',
+                  'Not on Display',
+                  'Unknown',
+                  'Pre-Collection')
 
 weekly <- mutate(weekly, 
-                  feature_desc = factor(feature_desc, levels = feature_level),
-                  display_desc = factor(display_desc))
+                  feature_desc = factor(feature_desc, levels = feature_levels),
+                  display_desc = factor(display_desc, levels = display_levels))
 ``` 
 
 
@@ -271,8 +261,8 @@ commodity_level = c('PASTA',
 
 product <- mutate(product, 
                   commodity = factor(commodity, levels = commodity_level))
-```
 
+```
 
 I created a variable named 'product_attribute' which identifies a characteristic to group by (such as buttermilk, maple, fettucini). This also cleaned inconsistent product names so that similar products can be compared. 
 
@@ -444,7 +434,9 @@ product <- mutate(product,
 
 I then created a new variable called 'product_size_factor' to represent the relative size of products in each commodity. Because the product sizes are now numeric, I was can calculate the median and IQR for each commodity.  
 
+
 ```{r determine_size_splits, message = FALSE, warning = FALSE}
+
 # Determine appropriate splits for product_size groups
 commodity_split <- split(product, f = product$commodity)
 pasta_df <- data.frame(commodity_split[1])
@@ -454,8 +446,14 @@ syrup_df <- data.frame(commodity_split[4])
 
 # Summary statistics for product sizes
 size_stats <- map(c(pasta_df, sauce_df, pancake_df, syrup_df), summary, na.rm=TRUE)
-size_stats[c(3,10,17, 24)] #print only product_size stats
+size_stats[c(3, 9, 15, 21)] #print only product_size stats
+
+#clean environment
+remove_objects <- c('commodity_split', 'pasta_df', 'sauce_df', 'pancake_df', 'syrup_df', 'size_stats')
+rm(list = ls()[ls() %in% remove_objects])
 ```
+
+
 
 ```{r code_checking_commodity_sizes, include = FALSE, message = FALSE, warning = FALSE}
 # Count instance of each product size by commodity
@@ -521,20 +519,31 @@ round(table(product$product_size_factor, product$commodity) %>%
 ```
 
 
+Final cleanup of product file to prepare for modeling.
 
-The final version of cleaned product table (included because there were a lot of changes): 
+```{r}
+#convert brand to uppercase to be consistend and factor so it can be used in models
+product$brand = toupper(factor(product$brand))
+```
+
+
+
+The cleaned product table (included because there were a lot of changes to product data): 
 
 ```{r cleaned_prod_table, echo = FALSE, message = FALSE, warning = FALSE}
 # Cleaned product data
-product_print <- product %>% 
+datatable(product %>% 
   select(upc, commodity, product_attribute, brand, product_description, product_size, product_size_factor, everything()) %>%
-  arrange(desc(commodity), upc)
-datatable(product_print)
+  arrange(desc(commodity), upc))
 ```
 
 
 
 ### 3.4 Join Tables
+
+**The final prep step is to join the data.** 
+
+I evaluated possible issues, then joined the dataframes, then cleaned up the joined data by renaming, filling in nulls, and reordering the columns
 
 **Determine possible issues with tables before joining**
 
@@ -563,7 +572,7 @@ Transactions and Store are joined using 'store'
 
 ```{r join_tables, message = FALSE, warning = FALSE}
 # Join Tables
-carbo_clean <- transactions %>%
+carbo <- transactions %>%
           inner_join(product, by = 'upc')  %>%
           left_join(weekly, by = c('upc', 'week', 'store', 'geography')) %>%
           left_join(store, by = 'store') %>%
@@ -576,52 +585,43 @@ I renamed columns to be clear, shorter, and consistent.
 
 ```{r rename_clean, message = FALSE, warning = FALSE}
 # Rename columns to be clear and consistent
-setnames(carbo_clean, 
+setnames(carbo, 
          old = c('units', 'time_of_transaction', 'product_description',
                  'product_size', 'store_zip_code'), 
          new = c('quantity', 'time', 'product_desc', 'ounces', 'store_zip'))
 ```
 
 
-```{r, include = FALSE}
-# Used in in development so I don't have to keep recreating the dataset from the start
-carbo_backup <- carbo_clean
-```
-
-```{r, include = FALSE}
-# Used in in development so I don't have to keep recreating the dataset from the start
-carbo_clean <- carbo_backup
-```
-
 After the join, there are missing values for feature_desc and display_desc which I will fill in with 'Pre-Collection' and 'Unknown'. Implementing this involves saving the current factor level, converting the column to character, assigning the new values where there were missing values, then refactoring the column.
 
+
 ```{r adjust_feature_display_factors, message = FALSE, warning = FALSE }
-# Missing values as a result of transaciton and weekly join
+# Missing values as a result of transaction and weekly join
 
 # Preserve feature levels
-feature_levels <- c(levels(carbo_clean$feature_desc), 'Pre-Collection', 'Unknown')
-display_levels <- c(levels(carbo_clean$display_desc), 'Pre-Collection', 'Unknown')
+feature_levels <- levels(carbo$feature_desc)
+display_levels <- levels(carbo$display_desc)
 
 # Convert to character
-carbo_clean$feature_desc <- as.character(carbo_clean$feature_desc)
-carbo_clean$display_desc <- as.character(carbo_clean$display_desc)
+carbo$feature_desc <- as.character(carbo$feature_desc)
+carbo$display_desc <- as.character(carbo$display_desc)
 
 # Code values before and after week 43
-carbo_clean$feature_desc <- ifelse(carbo_clean$week < 43, 
+carbo$feature_desc <- ifelse(carbo$week < 43, 
                                    'Pre-Collection',
-                                   carbo_clean$feature_desc)
-carbo_clean$feature_desc <- ifelse(carbo_clean$week >= 43 & is.na(carbo_clean$feature_desc), 
+                                   carbo$feature_desc)
+carbo$feature_desc <- ifelse(carbo$week >= 43 & is.na(carbo$feature_desc), 
                                    'Unknown',
-                                   carbo_clean$feature_desc)
-carbo_clean$display_desc <- ifelse(carbo_clean$week < 43, 
+                                   carbo$feature_desc)
+carbo$display_desc <- ifelse(carbo$week < 43, 
                                    'Pre-Collection',
-                                   carbo_clean$display_desc)
-carbo_clean$display_desc <- ifelse(carbo_clean$week >= 43 & is.na(carbo_clean$display_desc), 
+                                   carbo$display_desc)
+carbo$display_desc <- ifelse(carbo$week >= 43 & is.na(carbo$display_desc), 
                                    'Unknown',
-                                   carbo_clean$display_desc)
+                                   carbo$display_desc)
 
 # Refactor with new levels
-carbo_clean <- mutate(carbo_clean, 
+carbo <- mutate(carbo, 
                   feature_desc = factor(feature_desc, levels = feature_levels),
                   display_desc = factor(display_desc, levels = display_levels))
 ```
@@ -629,7 +629,7 @@ carbo_clean <- mutate(carbo_clean,
 
 ```{r missing_val_check, include = FALSE, message = FALSE, warning = FALSE}
 # Verify there are no more missing values
-colSums(is.na(carbo_clean))
+colSums(is.na(carbo))
 ```
 
 
@@ -637,7 +637,7 @@ I reordered the columns.
  
 ```{r reorder_columns_clean, message = FALSE, warning = FALSE}
 # Reorder columns
-carbo_clean <- carbo_clean %>%
+carbo <- carbo %>%
   select(household, week, feature_desc, display_desc, commodity, brand, product_attribute, 
          ounces, product_size_factor, upc, product_desc, coupon, quantity, dollar_sales, 
          day, time, basket, everything())
@@ -646,46 +646,123 @@ carbo_clean <- carbo_clean %>%
 
 ### 3.5 Summary of Cleaned Data
 
-In the cleaned data set, each observation is a household's UPC from a specific day. This cleaned data set contains `r dim(carbo_clean)[1]` observations and `r dim(carbo_clean)[2]` variables.
+In the cleaned data set, each observation is a household's UPC from a specific day. This cleaned data set contains `r dim(carbo)[1]` observations and `r dim(carbo)[2]` variables.
 
 **The key variables I will be looking at are:**
 
-* **commodity** - which has 4 values: `r unique(sort(carbo_clean$commodity))`
+* **commodity** - which has 4 values: `r unique(sort(carbo$commodity))`
 
-* **feature_desc** - which is a factor with 8 ordered levels: `r levels(carbo_clean$feature_desc)`
+* **feature_desc** - which is a factor with 8 ordered levels: `r levels(carbo$feature_desc)`
 
-* **product_desc** - which is the name of the products. There are `r length(unique(carbo_clean$product_desc))` different products.
+* **product_desc** - which is the name of the products. There are `r length(unique(carbo$product_desc))` different products.
 
-* **household** - there are `r length(unique(carbo_clean$household))` unique households. 
+* **household** - there are `r length(unique(carbo$household))` unique households. 
 
 ```{r glimpse_clean, echo=FALSE, message = FALSE, warning = FALSE}
-glimpse(carbo_clean)
+glimpse(carbo)
 ```
 
-**The first 500 sorted observations**
+**The first 500 observations**
 
-```{r, datatable_clean, echo=FALSE, message = FALSE, warning = FALSE}
+```{r, datatable_clean, echo=FALSE, message = FALSE, warning = FALSE, errors = FALSE}
 # First 500 rows of the cleaned data
-datatable(head(carbo_clean, 500))
+datatable(head(carbo, 500))
 ```
 
 
 ## 4 Exploratory Data Analysis
 
-### Exploratory Plan
 
-This step combines visualization with transformation to ask and answer interesting questions about the data. Data exploration is the art of looking at your data with goal of understanding the data. We calculate statistics and make visuals to find trends, anomalies, patterns, or relationships among the data.
+```{r, include = FALSE}
+# Used in in development so I don't have to keep recreating the dataset from the start
+carbo_backup <- carbo
+```
 
-I plan to slice the joined table in ways that will show households that have and haven't responded to featured advertising. I will evaluate whether these households had previously purchased the product and subsequently purchased the product. I can also look at whether they had purchased a similar product, but switched to a featured product.
+```{r, include = FALSE}
+# Used in in development so I don't have to keep recreating the dataset from the start
+carbo <- carbo_backup
+```
 
-Most of the variables I will create will be the result of grouping/aggregations. Some of these might be counts of products marketed, counts of products purchased, percent change in sales between weeks, and counts by binned product size. 
-
-Some graphs I could create are line charts comparing commodities on the weeks there are campaigns, the weeks before, and the weeks after. I could create histogram of overall counts of how often campaigns are used for different commodities. 
 
 
-### Modeling
+### Exploratory Data Analysis
 
-Modeling is capturing patterns from data, this is referred to as fitting (or training) a model. For supervised learning training we provide the model with features (variables describing situation) and a label (what we want to predict). The model learns a mapping from the features to the label. After it has been fit, you can apply the model to a new batch of data to predict the label. 
+This step combines visualization with transformation to ask and answer interesting questions about the data. We calculate statistics and make visuals to find trends, anomalies, patterns, or relationships among the data.
+
+
+
+
+
+#### Aggregating to the Product Grain
+
+I looked at the data through the lens of product. I arranged the data so that one product is a single row in the dataframe. I summarized the number of times over the two year period this product was part of specific displays, calculated quantities, number of baskets, dollars, stores.
+
+```{r message = FALSE, warning = FALSE, errors = FALSE}
+#creating new dataframe at product grain: each observation (row) is a different upc
+carbo_product = carbo %>%
+                group_by(upc, commodity, brand, product_attribute, product_size_factor, product_desc) %>%
+                summarize(num_households = n_distinct(household), 
+                  num_store_front = sum(display_desc == 'Store Front'),
+                  num_in_aisle = sum(display_desc == 'In-Shelf'),
+                  percent_coupons = mean(coupon), 
+                  total_quantity = sum(quantity), 
+                  avg_quantity = mean(quantity),
+                  max_quantity = max(quantity),
+                  num_baskets = n_distinct(basket),
+                  num_weeks = n_distinct(week),
+                  first_week = min(week),
+                  last_week = max(week),
+                  avg_dollars = round(mean(dollar_sales),2),
+                  num_stores = n_distinct(store))
+```
+
+
+
+#### Modeling Product Clusters
+
+Clustering is a form of EDA where observations are divided into meaningful groups that share common characteristics (features). Cluster members are similar to one another, and distinctly different from others outside the cluster. I clusterd the product dataframe so that I could compare groups.
+
+```{r message = FALSE, warning = FALSE, errors = FALSE}
+dist_carbo <- dist(carbo_product, method='binary') #jiccard distance used for categorical
+hc_carbo <- hclust(dist_carbo, method='complete') #linkage
+cluster_assignment <- cutree(hc_carbo, k = 3) #extract cluster assignment
+carbo_product$cluster = cluster_assignment #append assignment to original dataframe
+```
+
+Product Grain Dataframe Showing Cluster Assignments. 
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+# Product Grain Dataframe with cluster assignment
+datatable(carbo_product %>%
+  select (cluster, everything()) %>%
+  arrange(cluster) )
+```
+
+
+It's hard to visualize clusters with more than two variables. But we can use summary statistics of features in order to build a narrative of what makes the observations similar to each other within the cluster while different from observations in other clusters. Each row is a different cluster and the columns are summary statistics for that cluster. 
+
+```{r message = FALSE, warning = FALSE, errors = FALSE}
+#statistics on features clustered
+clustered_stats = carbo_product %>% 
+  group_by(cluster) %>% 
+  summarise_all(funs(round(mean(.),2)))
+
+datatable(clustered_stats)
+```
+We can also visualze with a dendrogram, where the height of each branch is determined by linkage and distance decisions we made during clustering. The x-axis plots observations, so we see that using 3 clusters, one is very small only including a few observations (because it is narrow). The labels are hard to read as there are 900 observations.
+
+```{r message = FALSE, warning = FALSE, errors = FALSE}
+#colored dendrogram to show cluster height
+library(dendextend)
+dend_clustered <- as.dendrogram(hc_carbo) #converts hclust to dendrogram
+dend_colored <- color_branches(dend_clustered, k=3)
+# get the labels:
+plot(dend_colored)
+
+
+```
+
+
 
 ## 5 Summary
 

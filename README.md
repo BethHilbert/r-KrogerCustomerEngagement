@@ -18,7 +18,7 @@ The original dataset includes 5,197,681 transactions, the grain is one row per h
 
 Links
 --------------------
-RPubs (knit version): http://rpubs.com/Beth_Hilbert/443311
+RPubs (knit version): http://rpubs.com/Beth_Hilbert/446290
 
 Code: https://github.com/BethHilbert/r-KrogerCustomerEngagement/blob/master/KrogerCustomerEngagement.Rmd
 
