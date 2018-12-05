@@ -34,9 +34,11 @@ The following packages are required to reproduce these results:
 ```{r load_packages, message = FALSE, warning = FALSE}
 # Load Required Packages
 library(data.table) ## Used to set names without rewriting table
+library(dendextend) ## for use drawaing dendrogram with clustering models
 library(DT) ## Create functional tables in HTML
 library(haven) ## Read statistical software data (original data is stored in SAS files)
 library(tidyverse) ## Collection of R data science packages 
+library(scales) ## formats axis labels with dollars and commas
 ```
 
 Loading Tidyverse loads a collection of data science packages. From Tidyverse I am using: 
@@ -140,7 +142,6 @@ I then looked at the values and distributions of each variable using summary(df)
 I looked at the general distribution of the transaction data. There are `r n_distinct(transactions$household) ` unique households. There is an average of `r round((n_distinct(transactions$basket) / n_distinct(transactions$household)),2) ` baskets per household over the 2 year period. This seems like a very small number of grocery trips. This is indicative to me that when the data was sampled, the focus was not on preserving transactions for an entire household. Because of this, I determined the data would not support analyzing a specific customers response to a campaign. So I changed the grain of my review from looking at transactions by individual households to looking at products.  
 
 Coupons were used on products in `r round(mean(transactions$coupon)*100,2) ` % of the transactions. I do not know the industry standard, but it seems reasonable.
-
 
 I then evaluated whether the dollar sales were reasonable. The sales ranged from $`r range(transactions$dollar_sales)[1] ` to $`r range(transactions$dollar_sales)[2] ` with a median sale of $`r median(transactions$dollar_sales)`.
 
@@ -691,11 +692,81 @@ This step combines visualization with transformation to ask and answer interesti
 
 
 
+### Frequency
+Up to this point, I have included all observations, regardless of whether a weekly marketing campaign was recorded. At this point, I filter out the observations where weekly marketing campaign is unknown, so that I can zoom in on the known campaigns. 
 
 
-#### Aggregating to the Product Grain
+```{r}
+#Remove observations where weekly marketing unknown
+carbo <- carbo %>%
+  filter (!display_desc %in% c("Pre-Collection", "Unknown"))
+```
 
-I looked at the data through the lens of product. I arranged the data so that one product is a single row in the dataframe. I summarized the number of times over the two year period this product was part of specific displays, calculated quantities, number of baskets, dollars, stores.
+I looked at the frequency of product attributes as well as location of products on weekly mailer and store displays. 
+
+
+```{r}
+carbo %>%
+  ggplot(aes(fct_rev(fct_infreq(product_attribute)))) +
+  geom_bar()+
+  scale_x_discrete(name='Product Attribute') +
+  scale_y_continuous(labels = comma) +
+  ggtitle('Product Attribute Frequency') +
+  coord_flip()
+  
+```
+
+```{r}
+carbo %>%
+  ggplot(aes(fct_rev(fct_infreq(feature_desc)))) +
+  geom_bar()+
+  scale_x_discrete(name='Mailer Location') +
+  scale_y_continuous(labels = comma) +
+  ggtitle('Product Location In Weekly Mailer') +
+  coord_flip()
+```
+
+
+
+```{r}
+carbo %>%
+  ggplot(aes(fct_rev(fct_infreq(feature_desc)), fill = commodity)) +
+  geom_bar()+
+  scale_x_discrete(name='Mailer Location') +
+  scale_y_continuous(labels = comma) +
+  ggtitle('Product Location In Weekly Mailer (grouped by Commodity)') +
+  facet_wrap(~ commodity)+
+  coord_flip()
+```
+
+
+```{r}
+carbo %>%
+  ggplot(aes(fct_rev(fct_infreq(display_desc)))) +
+  geom_bar()+
+  scale_x_discrete(name='Display Location') +
+  scale_y_continuous(labels = comma) +
+  ggtitle('Product Location In-Store Display') +
+  coord_flip()
+```
+
+
+
+```{r}
+carbo %>%
+  ggplot(aes(fct_rev(fct_infreq(display_desc)), fill=commodity)) +
+  geom_bar()+
+  scale_x_discrete(name='Display Location') +
+  scale_y_continuous(labels = comma) +
+  ggtitle('Product Location In-Store Display (grouped by Commodity)') +
+  facet_wrap(~ commodity)+
+  coord_flip()
+```
+
+
+#### Aggregate to the Product Grain
+
+Next I looked at the data through the lens of product. I arranged the data so that one product is a single row in the dataframe. I summarized the number of times over the two year period this product was part of specific displays, calculated quantities, number of baskets, dollars, stores.
 
 ```{r message = FALSE, warning = FALSE, errors = FALSE}
 #creating new dataframe at product grain: each observation (row) is a different upc
@@ -716,9 +787,13 @@ carbo_product = carbo %>%
                   num_stores = n_distinct(store))
 ```
 
+Top three products by quantity sold.
 
+```{r}
+carbo %>% top_n(3, quantity) 
+```
 
-#### Modeling Product Clusters
+#### Model Product Clusters
 
 Clustering is a form of EDA where observations are divided into meaningful groups that share common characteristics (features). Cluster members are similar to one another, and distinctly different from others outside the cluster. I clusterd the product dataframe so that I could compare groups.
 
@@ -729,7 +804,7 @@ cluster_assignment <- cutree(hc_carbo, k = 3) #extract cluster assignment
 carbo_product$cluster = cluster_assignment #append assignment to original dataframe
 ```
 
-Product Grain Dataframe Showing Cluster Assignments. 
+Product Grain Dataframe Showing Cluster Assignments
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
 # Product Grain Dataframe with cluster assignment
@@ -749,19 +824,23 @@ clustered_stats = carbo_product %>%
 
 datatable(clustered_stats)
 ```
-We can also visualze with a dendrogram, where the height of each branch is determined by linkage and distance decisions we made during clustering. The x-axis plots observations, so we see that using 3 clusters, one is very small only including a few observations (because it is narrow). The labels are hard to read as there are 900 observations.
+
+We can also visualze with a dendrogram, where the height of each branch is determined by linkage and distance decisions we made during clustering. The x-axis plots observations, so we see that using 3 clusters, one is very small only including a few observations (because it is narrow). The members appear to be tightly grouped, but different from one another. The labels are hard to read as there are 900 observations.
 
 ```{r message = FALSE, warning = FALSE, errors = FALSE}
 #colored dendrogram to show cluster height
-library(dendextend)
 dend_clustered <- as.dendrogram(hc_carbo) #converts hclust to dendrogram
 dend_colored <- color_branches(dend_clustered, k=3)
 # get the labels:
 plot(dend_colored)
-
-
 ```
 
+
+```{r}
+# Plot the relationship between two selected variables and color lines by the assigned cluster
+ggplot(carbo_product, aes( x = product_attribute, y = avg_quantity, color = factor(cluster))) + 
+    geom_line(aes(group = product_attribute))
+```
 
 
 ## 5 Summary
