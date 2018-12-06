@@ -198,15 +198,21 @@ transactions <- mutate(transactions,
 ```
 
 
+
 **Tidying weekly promotion data**
 
 In the weekly promotion data there are `r length(unique(weekly$feature_desc))` types of features and `r length(unique(weekly$display_desc))` types of displays. I coerced both of these to factors. 
 
 * Feature_desc represent ad promotions. I created factor levels with the assumption that items on the advertising wrap are more important than covers, which are more important than not featured items. 
 
-* Display_desc represents in-store promotion location. For display I created factor levels with the assumption that End Caps are better than aisles, and front of store is better than rear.
+* Display_desc represents in-store promotion location. For display I created factor levels with the assumption that End Caps are better than aisles, and front of store is better than rear. I will later use these levels as variable names, so I changed hyphens and slashes to underscores
 
 ```{r tidy_weekly, message = FALSE, warning = FALSE} 
+
+#change hyphen and slashes to underscore 
+weekly$display_desc <- str_replace_all(weekly$display_desc,"-","_")
+weekly$display_desc <- str_replace_all(weekly$display_desc,"Promo/Seasonal Aisle","Promo_Seasonal Aisle")
+
 # Factor feature and display descriptions
 feature_levels = c('Wrap Front Feature', 
                   'Wrap Back Feature', 
@@ -217,25 +223,26 @@ feature_levels = c('Wrap Front Feature',
                   'Interior Page Line Item',
                   'Not on Feature',
                   'Unknown',
-                  'Pre-Collection')
+                  'Pre_Collection')
 
 display_levels = c('Store Front',
                   'Front End Cap',
-                  'Side-Aisle End Cap',
-                  'Promo/Seasonal Aisle',
+                  'Side_Aisle End Cap',
+                  'Promo_Seasonal Aisle',
                   'Secondary Location Display',
                   'Rear End Cap',
                   'Store Rear',
-                  'Mid-Aisle End Cap',
-                  'In-Aisle',
-                  'In-Shelf',
+                  'Mid_Aisle End Cap',
+                  'In_Aisle',
+                  'In_Shelf',
                   'Not on Display',
                   'Unknown',
-                  'Pre-Collection')
+                  'Pre_Collection')
 
 weekly <- mutate(weekly, 
                   feature_desc = factor(feature_desc, levels = feature_levels),
                   display_desc = factor(display_desc, levels = display_levels))
+
 ``` 
 
 
@@ -557,7 +564,7 @@ Transactions and Products are joined using 'upc'
 
 Transactions and Weekly are joined using 'upc', 'week', 'store', and 'geography'
 
-* There are `r transactions %>% anti_join(weekly) %>% tally()` transactions which are not associated with a weekly observation. Many of these are because promotion information was not recorded before week 43 which is 40% of the time period. After the join, there will be missing values for feature_desc and display_desc in these rows. Because Weekly promotions were not collected before week 43, I will assign 'Pre-Collection' to those missing values. But for weeks after that I will assign 'Unknown' to missing values. While these missing values after week 42 may reflect there were not any promotions for that UPC, I did not make that assumption because there is already a category called 'Not On Feature'. 
+* There are `r transactions %>% anti_join(weekly) %>% tally()` transactions which are not associated with a weekly observation. Many of these are because promotion information was not recorded before week 43 which is 40% of the time period. After the join, there will be missing values for feature_desc and display_desc in these rows. Because Weekly promotions were not collected before week 43, I will assign 'Pre_Collection' to those missing values. But for weeks after that I will assign 'Unknown' to missing values. While these missing values after week 42 may reflect there were not any promotions for that UPC, I did not make that assumption because there is already a category called 'Not On Feature'. 
 
 * There are `r weekly %>% anti_join(transactions) %>% tally()` weekly observations which are not associated with a transaction. I will ignore these weeks (automatically by the format of the join).
 
@@ -593,7 +600,7 @@ setnames(carbo,
 ```
 
 
-After the join, there are missing values for feature_desc and display_desc which I will fill in with 'Pre-Collection' and 'Unknown'. Implementing this involves saving the current factor level, converting the column to character, assigning the new values where there were missing values, then refactoring the column.
+After the join, there are missing values for feature_desc and display_desc which I will fill in with 'Pre_Collection' and 'Unknown'. Implementing this involves saving the current factor level, converting the column to character, assigning the new values where there were missing values, then refactoring the column.
 
 
 ```{r adjust_feature_display_factors, message = FALSE, warning = FALSE }
@@ -609,13 +616,13 @@ carbo$display_desc <- as.character(carbo$display_desc)
 
 # Code values before and after week 43
 carbo$feature_desc <- ifelse(carbo$week < 43, 
-                                   'Pre-Collection',
+                                   'Pre_Collection',
                                    carbo$feature_desc)
 carbo$feature_desc <- ifelse(carbo$week >= 43 & is.na(carbo$feature_desc), 
                                    'Unknown',
                                    carbo$feature_desc)
 carbo$display_desc <- ifelse(carbo$week < 43, 
-                                   'Pre-Collection',
+                                   'Pre_Collection',
                                    carbo$display_desc)
 carbo$display_desc <- ifelse(carbo$week >= 43 & is.na(carbo$display_desc), 
                                    'Unknown',
@@ -692,14 +699,14 @@ This step combines visualization with transformation to ask and answer interesti
 
 
 
-### Frequency
+#### Frequency
 Up to this point, I have included all observations, regardless of whether a weekly marketing campaign was recorded. At this point, I filter out the observations where weekly marketing campaign is unknown, so that I can zoom in on the known campaigns. 
 
 
 ```{r}
 #Remove observations where weekly marketing unknown
 carbo <- carbo %>%
-  filter (!display_desc %in% c("Pre-Collection", "Unknown"))
+  filter (!display_desc %in% c("Pre_Collection", "Unknown"))
 ```
 
 I looked at the frequency of product attributes as well as location of products on weekly mailer and store displays. 
@@ -766,15 +773,13 @@ carbo %>%
 
 #### Aggregate to the Product Grain
 
-Next I looked at the data through the lens of product. I arranged the data so that one product is a single row in the dataframe. I summarized the number of times over the two year period this product was part of specific displays, calculated quantities, number of baskets, dollars, stores.
+Next I looked at the data through the lens of product. I arranged the data so that one product is a single row in the dataframe. I summarized the quantity of sales, number baskets, number weeks, number stores, etc.
 
 ```{r message = FALSE, warning = FALSE, errors = FALSE}
 #creating new dataframe at product grain: each observation (row) is a different upc
 carbo_product = carbo %>%
                 group_by(upc, commodity, brand, product_attribute, product_size_factor, product_desc) %>%
                 summarize(num_households = n_distinct(household), 
-                  num_store_front = sum(display_desc == 'Store Front'),
-                  num_in_aisle = sum(display_desc == 'In-Shelf'),
                   percent_coupons = mean(coupon), 
                   total_quantity = sum(quantity), 
                   avg_quantity = mean(quantity),
@@ -784,7 +789,81 @@ carbo_product = carbo %>%
                   first_week = min(week),
                   last_week = max(week),
                   avg_dollars = round(mean(dollar_sales),2),
-                  num_stores = n_distinct(store))
+                  total_dollars = round(sum(dollar_sales),2),
+                  num_stores = n_distinct(store),
+                  num_regions = n_distinct(geography)
+                  )
+```
+
+Then I counted the number of times the product(upc) was part of specific locations in the weekly mailer and in-store displays. 
+
+```{r}
+#original of adding counts feature levels
+level_names <- carbo %>%
+    pull(feature_desc) %>%
+    levels() 
+
+level_names_underscore <- str_replace_all(level_names," ","_") #replace spaces
+
+for (i in seq_along(level_names_underscore)) {
+  variable_name_new <- paste0("Num_Feature_", level_names_underscore[i])
+  carbo_product1 <- carbo %>% group_by(upc) %>%
+                summarize(!!variable_name_new := sum(feature_desc == level_names[i]))
+  
+  carbo_product <- carbo_product%>%
+          left_join(carbo_product1, by = 'upc')
+}
+
+rm(carbo_product1)
+```
+
+
+```{r}
+#original of adding counts display levels
+level_names <- carbo %>%
+    pull(display_desc) %>%
+    levels() 
+
+level_names_underscore <- str_replace_all(level_names," ","_") #replace spaces
+
+for (i in seq_along(level_names_underscore)) {
+  variable_name_new <- paste0("Num_Display_", level_names_underscore[i])
+  carbo_product1 <- carbo %>% group_by(upc) %>%
+                summarize(!!variable_name_new := sum(display_desc == level_names[i]))
+  
+  carbo_product <- carbo_product%>%
+          left_join(carbo_product1, by = 'upc')
+}
+
+rm(carbo_product1)
+```
+
+
+making into function of adding counts display and feature levels
+```{r }
+# attempt at making function to count feature and display levels 
+# I can't figure out how to pass the column into the function. ################
+# To pass it for level names, I could get it to work if I passed df$col
+# But later in the summarize function it doesn't work.
+# Is there a way to rewrite this to group and summarize with a column I have passed into function?
+
+factor_levels <- function(column, prefix="Num_") {
+  #replaces spaces from factor levels
+  level_names <- levels(column) #this column works
+  level_names_underscore <- str_replace_all(level_names," ","_") 
+
+  #iterates through factor levels, creating a field named after campaign and counting per upd
+  for (i in seq_along(level_names_underscore)) {
+    variable_name_new <- paste0(prefix, level_names_underscore[i])
+    carbo_product1 <- carbo %>% group_by(upc) %>%
+                summarize(!!variable_name_new := sum(column == level_names[i])) #this column doesn't
+    carbo_product <- carbo_product%>%
+          left_join(carbo_product1, by = 'upc')
+  }
+}
+
+factor_levels(column = carbo$feature_desc, prefix = "Num_Feature1_")
+factor_levels(column = carbo$display_desc, prefix = "Num_Display1_")
 ```
 
 Top three products by quantity sold.
@@ -793,11 +872,13 @@ Top three products by quantity sold.
 carbo %>% top_n(3, quantity) 
 ```
 
-#### Model Product Clusters
+
+#### Clustering Products
 
 Clustering is a form of EDA where observations are divided into meaningful groups that share common characteristics (features). Cluster members are similar to one another, and distinctly different from others outside the cluster. I clusterd the product dataframe so that I could compare groups.
 
 ```{r message = FALSE, warning = FALSE, errors = FALSE}
+#fitting the model
 dist_carbo <- dist(carbo_product, method='binary') #jiccard distance used for categorical
 hc_carbo <- hclust(dist_carbo, method='complete') #linkage
 cluster_assignment <- cutree(hc_carbo, k = 3) #extract cluster assignment
@@ -807,7 +888,7 @@ carbo_product$cluster = cluster_assignment #append assignment to original datafr
 Product Grain Dataframe Showing Cluster Assignments
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
-# Product Grain Dataframe with cluster assignment
+# Product Grain dataframe with cluster assignment
 datatable(carbo_product %>%
   select (cluster, everything()) %>%
   arrange(cluster) )
@@ -831,13 +912,12 @@ We can also visualze with a dendrogram, where the height of each branch is deter
 #colored dendrogram to show cluster height
 dend_clustered <- as.dendrogram(hc_carbo) #converts hclust to dendrogram
 dend_colored <- color_branches(dend_clustered, k=3)
-# get the labels:
 plot(dend_colored)
 ```
 
 
 ```{r}
-# Plot the relationship between two selected variables and color lines by the assigned cluster
+# Plot the relationship between two selected variable with color showing assigned cluster
 ggplot(carbo_product, aes( x = product_attribute, y = avg_quantity, color = factor(cluster))) + 
     geom_line(aes(group = product_attribute))
 ```
