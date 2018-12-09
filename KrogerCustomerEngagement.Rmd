@@ -11,13 +11,12 @@ output:
 ## 1 Introduction
 
 ### Business Question
-My goal is analyze how weekly mailers and in-store displays correlate with sales 
+My goal is to analyze how weekly mailers and in-store displays correlate with sales 
 for carbohydrate products. I will measure the success of a promotion by the number 
 of shopping baskets that include the product. 
 
 ### Plan
-I will use the Carbo_Loading  
-[dataset](http://uc-r.github.io/data_wrangling/final-project) provided by 84.51. 
+I will use the Carbo_Loading [dataset](http://uc-r.github.io/data_wrangling/final-project) provided by 84.51. 
 
 The important fields I will use are feature description (describing weekly mailers), 
 display description (describing in-store promo displays), attribute (a field I 
@@ -28,7 +27,12 @@ created for grouping products such as maple, macaroni, alfredo), and commodity
 I will look at the data two ways. First I will look at promotion types and resulting 
 sales by commodity and attribute. Then I will aggregate the product information, 
 segment these products into groups with a hierarchical clustering model, and 
-analyze what differentiates the resulting clusters.
+analyze what differentiates the resulting clusters. I will look at how these 
+clusters differ in their response to promotions and brands purchased.
+
+The result will be some specific recommendations of promotion/commodity 
+combinations to continue in order to keep market share and some new 
+promotion/commodity combinations to drive new sales.
 
 ### Benefit
 The benefit of the analysis will be to see whether certain combinations of products 
@@ -833,6 +837,7 @@ plot_promotion_frequency <- function(column, axis_label) {
 }
 ```
 
+
 First I looked at in-store display promotions that results in sales. 
 
 Most of the pastas and sauces sold were not displayed in an in-store promotion. 
@@ -899,6 +904,9 @@ carbo %>%
   coord_flip()
 ```
 
+
+**Promotion Commodity: Sauce**
+
 Because it encompasses the most mentioned attributes, I dig further into the 
 Sauce commodity. Vegetable and mushroom sauces have the most sales.  
 
@@ -942,11 +950,16 @@ plot_attribute_frequency(column = 'feature_desc',
 ```
 
 
-### 4.2 Clustering Products
+### 4.2 Clustered Products
 
-Next I aggregated the product information, segmented these products into groups 
-with hierarchical clustering model, and then analyzed what differentiates the 
-resulting clusters. 
+When we talk about market segmentation, we often think of grouping people so 
+that we can engage with them in similar ways within a cluster. But as mentioned, 
+the sampling used for the data does not support a longitudal view of customers 
+as many customers only have one basket over the two year period. Also since the 
+products are limited to a few commodities, it is not possible to identify the 
+interactions with other commodity promotions or sales. So instead I segmented 
+the data by products. I used a hierarchical clustering model and then analyzed 
+what differentiates the products in the resulting clusters.
 
 **Aggregating to Product Grain**
 
@@ -1042,7 +1055,8 @@ I then analyzed this newly created product-grain dataframe, by grouping like
 products together using a clustering algorithm. Clustering is a type of "unsupervised" 
 learning in that we do not have a specific target we are predicting (such as sales 
 volume). Instead the model is fit by measuring "distances" between variables. 
-Observations are divided into meaningful groups that share common characteristics. 
+Using math, the computer divides observations into meaningful groups that share 
+common characteristics. 
 These cluster members are similar to one another, and distinctly different from 
 others outside the cluster. 
 
@@ -1143,8 +1157,8 @@ grid.arrange(p1, p2, p3, ncol = 3)
 
 
 Despite both methods suggesting 2 clusters, I decide to use 3 clusters. My reason 
-is that I would like to contrast the clusters and there would be more meaningful 
-information comparing 3 groups. 
+is that I would like contrast the product clusters and there would be more 
+meaningful information comparing 3 groups. 
 
 ```{r fit_cluster_model, message = FALSE, warning = FALSE, error = FALSE}
 # Fitting model and append cluster number
@@ -1170,25 +1184,32 @@ datatable(clustered_stats)
 
 Cluster 1 is small, but differentiates from the other clusters in that it appears 
 to be the least influenced by the weekly mailers. In fact there were 0 sales 
-from some weekly mailer feature categories (wrap front, back page, and interior 
-line item). They also visited the fewest stores for the fewest number of weeks. 
-This is not a group that is motivated to visit the store from weekly promotions.
+in some weekly mailer feature categories (wrap front, back page, and interior 
+line item). They also were purchased in the fewest stores for the fewest number 
+of weeks. This is not a group that attracts store visits from weekly promotions.
 
 Cluster 2 is the largest cluster and also appears to be the most influenced to 
-purchase items in the weekly mailers. They buy in higher quantities and for the 
-longest period (stretching from week 47 to week 100). Whereas the other two 
-clusters averaged 0 and 1.1 sales resulting from wrap front, this group averaged 
-70 from the wrap front and 37 from the wrap back. It would be worth looking further 
-into what motivates this group in order to focus our promotion campaigns. 
+purchase items in the weekly mailers. These products are bought in higher 
+quantities and for the longest period (stretching from week 47 to week 100). 
+Whereas the other two clusters averaged 0 and 1.1 sales resulting from wrap 
+front, this group averaged 70 from the wrap front and 37 from the wrap back. 
+It would be worth looking further into what motivates this group in order to 
+focus our promotion campaigns. 
 
 Cluster 3 is between the other two in terms of influence by mailers and displays, 
-but they purchase a higher percent of items with coupons. It's interesting that 
+but they purchase a higher percent of the time with coupons. It's interesting that 
 they aren't as influenced as cluster 2 by the mailers because responding to 
 mailers and collecting coupons both reflect coming to the store with an incentive 
 to purchase. Also interesting is that they also do not seem influencd by store 
-displays. It could be this group purchases what they came for but not much extra.
+displays. It could be people buying this product come to the store focues on 
+what they came to purchase and not much extra.
 
-Here's the Product-Grain table showing the cluster assignments.
+Even though these statistics reflect sums and aggregations, when the model was 
+fit it considered the influence of commodity, brand, product attribute, product 
+size. We can look at specific products assigned to each for insight.
+
+Here's the entire Product-Grain table showing the cluster assignments.
+
 
 ```{r table_cluster_assig, echo = FALSE, message = FALSE, warning = FALSE, error = FALSE}
 # Product-grain dataframe with cluster assignment
@@ -1196,6 +1217,52 @@ datatable(carbo_product %>%
   select(cluster, everything()) %>%
   arrange(cluster) )
 ```
+
+
+
+We can also look the category distributions within clusters. I looked at how 
+brand was included in each cluster. I singled out the three lines of Private 
+Selection products and lumped all other brands together. 
+
+ 
+
+```{r table_kroger,  message = FALSE, warning = FALSE, error = FALSE}
+carbo_product %>% 
+  mutate(kroger_brand = fct_other(brand, 
+          keep = c('PRIVATE LABEL VALUE', 'PRIVATE LABEL', 'PRIVATE LABEL PREMIUM'))) %>% 
+  group_by(cluster, commodity) %>% 
+  count(kroger_brand) %>% 
+  arrange(desc(n)) %>% 
+  ggplot(aes(kroger_brand, n, color = commodity)) + 
+  geom_point() +
+  facet_grid(commodity ~ as.factor(cluster)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_color_brewer(palette = 'Set1') +
+  ggtitle('Cluster Distribution of Kroger Brands') +
+  labs(x = 'Brand', y = 'Number Products') +
+  coord_flip()
+```
+
+Through this lens, we see that cluster 1 contains the most syrup products and 
+the most pasta products. The most popular of the Kroger lines in this cluster 
+is the premium label. Previously we saw this was also the smallest cluster. 
+
+
+Cluster 2 was the largest cluster. It also includes the highest number of 
+Private Label brand products, plus two premium and 1 value category. There is 
+not as much of a difference between the number of Kroger products and the other 
+products within this cluster, suggeting people who purchase these products may 
+be loyal Kroger shoppers.   
+
+
+Cluster 3 products emphasize the sauce commodity. Cluster 3 also has the fewest 
+Kroger brand products. Even though this was the cluster that was also coupon 
+heavy, there were no purchases in the Kroger value label. This sheds light that 
+the coupons redeemed are most likely manufacturer coupons and not the result 
+of precision coupon mailings.  
+
+
 
 ```{r clean_product_environment, message = FALSE, warning = FALSE, error = FALSE}
 # Clean environment
@@ -1245,17 +1312,25 @@ interest in substitute products. I would place these products in secondary
 locations of the store where customers are currently looking for pancakes and 
 syrups, but draw attention to them. 
 
-**Differentiating products wIth clustering**
+**Differentiating products with clustering**
 
-By clustering the products, we identified three distinct groups. An interesting 
-insight was how the model defined the groups. A very large group was created that 
-bought in higher quantities and responded to promotions. But one cluster appears 
-to not be influences by promotions. Another cluster appears to not respond to 
-mailer or display promotions but to use coupons in higher proportions. 
+By clustering the products, we identified three distinct groups of products. An 
+interesting insight was how the model defined the groups. A very large group of 
+products was created that were bought in higher quantities and responded to by 
+promotions. But one cluster appears to not be influences by promotions. Another 
+cluster appears to have products that have not been part of display or mailer 
+promotions but are used with coupons. We also looked at this through the lens 
+of Kroger brands and saw that the group that was most coupon focused, bought the 
+least Kroger products and didn't buy any in the Kroger Value Line.
 
-An implication is to look further into the cluster that uses coupons to see what 
-types of products they are purchasing and why they are not responding to the 
-other promotion types as frequently. 
+An implication is to look further into the clusters for possibilities for cross 
+marketing complimentary products.  For example, cluster 1 is highest in syrup, 
+so we could look at complimentary pancake mixes that could be displayed in similar 
+locations. Cluster 3 is highest in coupons, but not in Kroger products. We 
+could market Kroger products with coupons that are complimentary to the sauces 
+they are purchasing. One idea could be recipes using the sauces but including 
+other Kroger products such as spices or vegetables and include coupons for those 
+other products to go with the sauces they are already purchasing. 
 
 ### Limitations
 
