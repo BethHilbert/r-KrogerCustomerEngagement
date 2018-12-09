@@ -16,20 +16,26 @@ for carbohydrate products. I will measure the success of a promotion by the numb
 of shopping baskets that include the product. 
 
 ### Plan
-I will use the Carbo_Loading  [dataset](http://uc-r.github.io/data_wrangling/final-project) 
-provided by 84.51. 
+I will use the Carbo_Loading  
+[dataset](http://uc-r.github.io/data_wrangling/final-project) provided by 84.51. 
 
 The important fields I will use are feature description (describing weekly mailers), 
-display description (describing in-store promo displays), attribute (a field I created 
-for grouping products such as maple, macaroni, alfredo), and commodity (pasta, sauce, 
-pancake, syrup). 
+display description (describing in-store promo displays), attribute (a field I 
+created for grouping products such as maple, macaroni, alfredo), and commodity 
+(pasta, sauce, pancake, syrup). 
 
 
 I will look at the data two ways. First I will look at promotion types and resulting 
-sales by commodity and attribute. Then I will aggregate the product information, segment these products into groups with a hierarchical clustering model, and analyze what differentiates the resulting clusters.
+sales by commodity and attribute. Then I will aggregate the product information, 
+segment these products into groups with a hierarchical clustering model, and 
+analyze what differentiates the resulting clusters.
 
 ### Benefit
-The benefit of the analysis will be to see whether certain combinations of products and promotions are more effective in producing sales. By understanding the types of promotions in which products are effective and the clusters which are most affected by promotions, we can improve the customer experience and drive business results.
+The benefit of the analysis will be to see whether certain combinations of products 
+and promotions are more effective in producing sales. By understanding the types 
+of promotions in which products are effective and the clusters which are most 
+affected by promotions, we can improve the customer experience and drive business 
+results.
 
 ## 2 Packages
 
@@ -62,16 +68,34 @@ Loading Tidyverse loads a collection of data science packages. From Tidyverse I 
 
 ### 3.1 Load Data
 
-**The first prep step is to understand the source of the data.**  I will use the Carbo_Loading dataset provided by 84.51. The [data](http://uc-r.github.io/data_wrangling/final-project) is a subset of four potentially related product commodities (pasta/sauce, pancake mix/syrup), capturing their sales and weekly promotions. Promotions are identified by location in weekly mailer, location of in-store display, and coupons redeemed. There are 927 products with their associated promotion campaigns over a 2 year period. The data includes 5,197,681 sale transactions with a grain of one row per household per UPC per day. This data set was prepared for classroom projects and case studies to allow students to interact with real-world data. 
+**The first prep step is to understand the source of the data.**  I will use the 
+Carbo_Loading dataset provided by 84.51. The 
+[data](http://uc-r.github.io/data_wrangling/final-project) 
+is a subset of four potentially related product commodities (pasta/sauce, 
+pancake mix/syrup), capturing their sales and weekly promotions. Promotions are 
+identified by location in weekly mailer, location of in-store display, and 
+coupons redeemed. There are 927 products with their associated promotion 
+campaigns over a 2 year period. The data includes 5,197,681 sale transactions 
+with a grain of one row per household per UPC per day. This data set was prepared 
+for classroom projects and case studies to allow students to interact with 
+real-world data. 
 
 
-Because the data is stored in a SAS file format (.sas7bdat), there are a few unique things to consider:
+Because the data is stored in a SAS file format (.sas7bdat), there are a few 
+unique things to consider:
 
 * The data is loaded using the read_sas command from the Haven package. 
 
-* Some variables included attributes which allow them to later be read back into SAS. However these attributes were only included on some of the key fields, which caused errors when joining the tables together. For example the 'upc' variable had attributes in the transactions and weekly tables, but not in product table. I removed the attributes with zap_formats(). 
+* Some variables included attributes which allow them to later be read back into 
+SAS. However these attributes were only included on some of the key fields, which 
+caused errors when joining the tables together. For example the 'upc' variable 
+had attributes in the transactions and weekly tables, but not in product table. 
+I removed the attributes with zap_formats(). 
 
-* SAS encodes nulls as blanks, so nulls are not identifiable with the typical is.na() function and do not show on summary() as missing values. The only nulls in the original datasets (encoded as blank strings) were in the product_size variable. However more nulls were introducted during the join process.
+* SAS encodes nulls as blanks, so nulls are not identifiable with the typical 
+is.na() function and do not show on summary() as missing values. The only nulls 
+in the original datasets (encoded as blank strings) were in the product_size 
+variable. However more nulls were introducted during the join process.
 
 
 ```{r load_data, message = FALSE, warning = FALSE, error = FALSE}
@@ -99,26 +123,40 @@ for (i in seq_along(files)) {
 
 ### 3.2 Initial Data Structure
 
-**The second prep step is to understand the initial structure of the data.**  The primary table is transactions and there are 3 lookup tables for products, stores, and weekly promotions.
+**The second prep step is to understand the initial structure of the data.**  
+The primary table is transactions and there are 3 lookup tables for products, 
+stores, and weekly promotions.
 
-* **Transaction Table** contains a sample of 2 years of carbo related transactions at the household level. The grain of the table is one row per household per UPC per day. There are `r comma(dim(transactions)[1])` transaction rows and `r dim(transactions)[2]` variables. The variables are named: `r names(transactions)`.
+* **Transaction Table** contains a sample of 2 years of carbo related transactions 
+at the household level. The grain of the table is one row per household per UPC 
+per day. There are `r comma(dim(transactions)[1])` transaction rows and 
+`r dim(transactions)[2]` variables. The variables are named: `r names(transactions)`.
 
-* **Product Table** provides detailed product information for each UPC. There are `r dim(product)[1]` product rows and `r dim(product)[2]` variables. The variables are named: `r names(product)`. 
+* **Product Table** provides detailed product information for each UPC. There 
+are `r dim(product)[1]` product rows and `r dim(product)[2]` variables. The 
+variables are named: `r names(product)`. 
 
-* **Weekly Table** provides weekly promotion activity for each UPC. In the weekly table, there are `r comma(dim(weekly)[1])` UPC weekly promotion rows and `r dim(weekly)[2]` variables. The variables are named: `r names(weekly)`. 
+* **Weekly Table** provides weekly promotion activity for each UPC. In the weekly 
+table, there are `r comma(dim(weekly)[1])` UPC weekly promotion rows 
+and `r dim(weekly)[2]` variables. The variables are named: `r names(weekly)`. 
 
-* **Store Table** records each store's zip code. There are `r dim(store)[1]` store rows and `r dim(store)[2]` variables. The variables are named: `r names(store)`. 
+* **Store Table** records each store's zip code. There are `r dim(store)[1]` 
+store rows and `r dim(store)[2]` variables. The variables are named: `r names(store)`. 
 
 
 **Comments on initial data structure:**
 
 * Households are uniquely identified.
 
-* Time is recorded by 'time_of_transaction'' expressed as 24 hour clock, 'week' expressed chronologically from 1 to 104, and 'day' expressed from 1 to 728. There is not an actual calendar date, only a relative chronological order of transactions.
+* Time is recorded by 'time_of_transaction'' expressed as 24 hour clock, 'week' 
+expressed chronologically from 1 to 104, and 'day' expressed from 1 to 728. There 
+is not an actual calendar date, only a relative chronological order of transactions.
 
-* Geography is divided into two large regions encompassing portions of several states.
+* Geography is divided into two large regions encompassing portions of several 
+states.
 
-* Coupon indicates whether a coupon was used with the UPC on that day for that household.  
+* Coupon indicates whether a coupon was used with the UPC on that day for that 
+household.  
 
 * Commodity refers to the 4 categories (Pasta, Pasta Sauce, Pancake Mix, Syrup). 
 
@@ -140,20 +178,41 @@ for (i in seq_along(df_names)) {
 
 **The third prep step is to look at the data.** 
 
-Decisions based on data are dependent on data quality. A large part of time is spent preparing the data for analysis. We have to decide which data to gather and what features of the data are important. This step also considers what data is missing and how to create new variables and summaries to reflect these gaps. 
+Decisions based on data are dependent on data quality. A large part of time is 
+spent preparing the data for analysis. We have to decide which data to gather and 
+what features of the data are important. This step also considers what data is 
+missing and how to create new variables and summaries to reflect these gaps. 
 
-To begin with, I verified the data was stored in a 'tidy' format in which observations are recorded in rows (measure same unit across all attributes with one measurement per row), variables are columns (measure same attribute across observations), and there is one type of observational unit per table. 
+To begin with, I verified the data was stored in a 'tidy' format in which 
+observations are recorded in rows (measure same unit across all attributes with 
+one measurement per row), variables are columns (measure same attribute across 
+observations), and there is one type of observational unit per table. 
 
-I then looked at the values and distributions of each variable using summary(df) and unique(sort(df$var)). I was looking for anything unusual such as variations on spelling, capitalization, missing, or unexpected values. As a result, I made a few changes to the transactions, products and weekly promotion tables. No changes were made to the store table.
+I then looked at the values and distributions of each variable using summary(df) 
+and unique(sort(df$var)). I was looking for anything unusual such as variations 
+on spelling, capitalization, missing, or unexpected values. As a result, I made 
+a few changes to the transactions, products and weekly promotion tables. No 
+changes were made to the store table.
 
 
 **Tidying transaction data**
 
-I looked at the general distribution of the transaction data. There are `r comma(n_distinct(transactions$household)) ` unique households. There is an average of `r round((n_distinct(transactions$basket) / n_distinct(transactions$household)),2) ` baskets per household over the 2 year period. This seems like a very small number of grocery trips. This is indicative to me that when the data was sampled, the focus was not on preserving transactions for an entire household. Because of this, I determined the data would not support analyzing a specific customer's response to a campaign. So I changed the grain of my review from looking at transactions by individual households to looking at products.  
+I looked at the general distribution of the transaction data. There are 
+`r comma(n_distinct(transactions$household)) ` unique households. There is an 
+average of `r round((n_distinct(transactions$basket) / n_distinct(transactions$household)),2) ` 
+baskets per household over the 2 year period. This seems like a very small number 
+of grocery trips. This is indicative to me that when the data was sampled, the 
+focus was not on preserving transactions for an entire household. Because of this, 
+I determined the data would not support analyzing a specific customer's response 
+to a campaign. So I changed the grain of my review from looking at transactions 
+by individual households to looking at products.  
 
-Coupons were used on products in `r round(mean(transactions$coupon)*100,2) ` % of the transactions. I do not know the industry standard, but it seems reasonable.
+Coupons were used on products in `r round(mean(transactions$coupon)*100,2) ` % 
+of the transactions. I do not know the industry standard, but it seems reasonable.
 
-I then evaluated whether the dollar sales were reasonable. The sales ranged from $`r range(transactions$dollar_sales)[1] ` to $`r range(transactions$dollar_sales)[2] ` with a median sale of $`r median(transactions$dollar_sales)`.
+I then evaluated whether the dollar sales were reasonable. The sales ranged 
+from $`r range(transactions$dollar_sales)[1] ` to $`r range(transactions$dollar_sales)[2] ` 
+with a median sale of $`r median(transactions$dollar_sales)`.
 
 
 ```{r trans_dollars, results= FALSE, message = FALSE, warning = FALSE, error = FALSE}
@@ -173,25 +232,42 @@ negative_dollars %>%
   arrange(desc(n))
 ```
 
-* There were `r count_negative_dollars` sales that were negative which represents `r percent_negative_dollars`% of total transactions. I assumed negatives were appropriate as there could be returns. I initially considered removing these rows with negative sales from the data since returning an item would be unaffected by advertising or product placement in the store. But I decided to keep this data to reflect net sales in products which were frequently returned.
+* There were `r count_negative_dollars` sales that were negative which represents
+`r percent_negative_dollars`% of total transactions. I assumed negatives were 
+appropriate as there could be returns. I initially considered removing these 
+rows with negative sales from the data since returning an item would be unaffected 
+by advertising or product placement in the store. But I decided to keep this data 
+to reflect net sales in products which were frequently returned.
 
-* There were `r count_zero_dollars` sales that were $0 which represents `r percent_zero_dollars`% of total transactions. I kept these rows since sales of $0 could be the result of a promotion.
+* There were `r count_zero_dollars` sales that were $0 which represents 
+`r percent_zero_dollars`% of total transactions. I kept these rows since sales 
+of $0 could be the result of a promotion.
 
-* There were some dollar values as high as $`r max(transactions$dollar_sales) ` and units as high as `r max(transactions$units) ` within a single basket. I used a boxplot to compare dollar sales to units and determined they were most likely within an expected range (more units purchased resulted in more dollars spent).
+* There were some dollar values as high as $`r max(transactions$dollar_sales) ` 
+and units as high as `r max(transactions$units) ` within a single basket. I used 
+a boxplot to compare dollar sales to units and determined they were most likely 
+within an expected range (more units purchased resulted in more dollars spent).
 
 
 ```{r boxplot_unusual_transactions, message = FALSE, warning = FALSE, error = FALSE}
 # Plot potentially unusual transactions
 boxplot(transactions$dollar_sales ~ transactions$units, 
-        main = 'Potentially Unusual Transactions', xlab = 'Quantity of UPC Per Basket', ylab = 'Dollars of UPC Per Basket')
+        main = 'Potentially Unusual Transactions', 
+        xlab = 'Quantity of UPC Per Basket', 
+        ylab = 'Dollars of UPC Per Basket')
 
 ```
 
 I made a few changes to the transaction data:
 
-* time_of_transactions - I coerced to numeric so it could be easily compared. I did not use a standard date format because other time related information is recorded chronologically, ignoring calendar date.
+* time_of_transactions - I coerced to numeric so it could be easily compared. I 
+did not use a standard date format because other time related information is 
+recorded chronologically, ignoring calendar date.
 
-* week is in both transaction table and weekly table. The transaction table weeks range from 1 to 104, but the weekly table starts at week 43. In my initial analysis, I kept all 104 weeks. But I later decided to only keep the transactions for which there is weekly promotion information. 
+* week is in both transaction table and weekly table. The transaction table weeks 
+range from 1 to 104, but the weekly table starts at week 43. In my initial 
+analysis, I kept all 104 weeks. But I later decided to only keep the transactions 
+for which there is weekly promotion information. 
 
 
 ```{r tidy_transactions, message = FALSE, warning = FALSE, error = FALSE}
@@ -202,25 +278,35 @@ transactions$time_of_transaction <- as.numeric(transactions$time_of_transaction)
 
 ```{r clean_trans_environment, message = FALSE, warning = FALSE, error = FALSE}
 # Clean environment
-remove_objects <- c('negative_dollars', 'count_negative_dollars', 'percent_negative_dollars', 
-                  'zero_dollars', 'count_zero_dollars', 'percent_zero_dollars' )
+remove_objects <- c('negative_dollars', 'count_negative_dollars', 
+                    'percent_negative_dollars', 'zero_dollars', 
+                    'count_zero_dollars', 'percent_zero_dollars' )
 rm(list = ls()[ls() %in% remove_objects])
 ```
 
 
 **Tidying weekly promotion data**
 
-In the weekly promotion data there are `r length(unique(weekly$feature_desc))` descriptions of weekly mailer and `r length(unique(weekly$display_desc))` descriptions of in-store display. I coerced both of these to factors. I also replaced hyphens and backslashes with underscores. 
+In the weekly promotion data there are `r length(unique(weekly$feature_desc))` 
+descriptions of weekly mailer and `r length(unique(weekly$display_desc))` 
+descriptions of in-store display. I coerced both of these to factors. I also 
+replaced hyphens and backslashes with underscores. 
 
-* feature_desc represents the weekly mailer promotions. I created factor levels with the assumption that items on the advertising wrap are more important than covers, which are more important than not featured items. 
+* feature_desc represents the weekly mailer promotions. I created factor levels 
+with the assumption that items on the advertising wrap are more important than 
+covers, which are more important than not featured items. 
 
-* display_desc represents the in-store promotion displays. I created factor levels with the assumption that end caps are better than aisles, and front of the store is better than rear. I will later use these levels as variable names, so I changed hyphens and slashes to underscores
+* display_desc represents the in-store promotion displays. I created factor 
+levels with the assumption that end caps are better than aisles, and front of 
+the store is better than rear. I will later use these levels as variable names, 
+so I changed hyphens and slashes to underscores
 
 ```{r tidy_weekly, message = FALSE, warning = FALSE, error = FALSE} 
 # Factor features and display descriptions
 # Change hyphen and slashes to underscore 
 weekly$display_desc <- str_replace_all(weekly$display_desc,'-','_')
-weekly$display_desc <- str_replace_all(weekly$display_desc,'Promo/Seasonal Aisle','Promo_Seasonal Aisle')
+weekly$display_desc <- str_replace_all(weekly$display_desc,
+                              'Promo/Seasonal Aisle','Promo_Seasonal Aisle')
 
 # Factor feature and display descriptions
 feature_levels = c('Wrap Front Feature', 
@@ -245,8 +331,8 @@ display_levels = c('Store Front',
                   'Not on Display')
 
 weekly <- mutate(weekly, 
-                  feature_desc = factor(feature_desc, ordered = TRUE, levels = feature_levels),
-                  display_desc = factor(display_desc, ordered = TRUE, levels = display_levels))
+    feature_desc = factor(feature_desc, ordered = TRUE, levels = feature_levels),
+    display_desc = factor(display_desc, ordered = TRUE, levels = display_levels))
 ``` 
 
 
@@ -275,7 +361,9 @@ product <- mutate(product,
                   commodity = factor(commodity, levels = commodity_level))
 ```
 
-I created a variable named 'product_attribute' which identifies a characteristic in the product description to group by (such as buttermilk, maple, fettucini). This cleaned inconsistent product names so that similar products can be compared. 
+I created a variable named 'product_attribute' which identifies a characteristic 
+in the product description to group by (such as buttermilk, maple, fettucini). 
+This cleaned inconsistent product names so that similar products can be compared. 
 
 ```{r create_product_attribute, message = FALSE, warning = FALSE, error = FALSE}
 # Create variable 'product_attribute' for grouping and renaming descriptions consistently
@@ -368,7 +456,11 @@ product <- product %>%
 ```
 
 
-For product size, I removed spaces, recalculated all values to ounces for comparison purposes, cleaned up labels/values, and coerced the final results to numeric. For unusual size coding (such as KH#13384) I looked at the product description and commodity to determine an appropriate size. Initially there were `r length(unique(product$product_size))` different values for product sizes.
+For product size, I removed spaces, recalculated all values to ounces for 
+comparison purposes, cleaned up labels/values, and coerced the final results to 
+numeric. For unusual size coding (such as KH#13384) I looked at the product 
+description and commodity to determine an appropriate size. Initially there were
+`r length(unique(product$product_size))` different values for product sizes.
 
 
 ```{r initial_product_size, message = FALSE, warning = FALSE, error = FALSE}
@@ -444,7 +536,9 @@ product <- mutate(product,
        product_size = as.numeric(product$product_size))
 ``` 
 
-I then created a new variable called 'product_size_factor' to represent the relative size of products in each commodity. Because the product sizes are now numeric, I was able to calculate the median and IQR for each commodity.  
+I then created a new variable called 'product_size_factor' to represent the 
+relative size of products in each commodity. Because the product sizes are now 
+numeric, I was able to calculate the median and IQR for each commodity.  
 
 
 ```{r determine_size_splits, message = FALSE, warning = FALSE, error = FALSE}
@@ -461,7 +555,7 @@ size_stats[c(3, 9, 15, 21)] #print only product_size stats
 ```
 
 
-```{r code_checking_commodity_sizes, include = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+```{r check_commodity_size, include = FALSE, message = FALSE, warning = FALSE, error = FALSE}
 # Count instance of each product size by commodity
 product %>%
   group_by(commodity, product_size) %>%
@@ -500,10 +594,12 @@ size_level = c('SMALL',
                'REGULAR', 
                'JUMBO')
 product <- mutate(product, 
-                  product_size_factor = factor(product_size_factor, levels = size_level))
+           product_size_factor = factor(product_size_factor, levels = size_level))
 
 ```
-I used statistics, counts, and my domain knowledge to determine appropriate cut off values for 'small', 'regular', and 'jumbo' in each commodity type. The cutoffs I assigned are:
+I used statistics, counts, and my domain knowledge to determine appropriate cut 
+off values for 'small', 'regular', and 'jumbo' in each commodity type. 
+The cutoffs I assigned are:
 
 * For Pasta:  `r PASTA_SMALL ` and `r PASTA_REGULAR`
 
@@ -525,7 +621,8 @@ round(table(product$product_size_factor, product$commodity) %>%
 ```
 
 
-The last thing I cleaned on the product data was to convert the brand to uppercase and then factor.
+The last thing I cleaned on the product data was to convert the brand to 
+uppercase and then factor.
 
 ```{r brand_to_upper, message = FALSE, warning = FALSE, error = FALSE}
 # Convert brand to uppercase and factor
@@ -533,18 +630,23 @@ product$brand = factor(toupper(product$brand))
 ```
 
 
-Here's the cleaned product table (I include the product table because there were a lot of changes, other tables did not have as many modifications): 
+Here's the cleaned product table (I include the product table because there 
+were a lot of changes, other tables did not have as many modifications): 
 
 ```{r cleaned_prod_table, echo = FALSE, message = FALSE, warning = FALSE, error = FALSE}
 # Cleaned product data
 datatable(product %>% 
-  select(upc, commodity, product_attribute, brand, product_description, product_size, product_size_factor, everything()) %>%
+  select(upc, commodity, product_attribute, brand, product_description, 
+         product_size, product_size_factor, everything()) %>%
   arrange(desc(commodity), upc))
 ```
 
-```{r clean_product_environment, message = FALSE, warning = FALSE, error = FALSE}
+```{r clean_product_environ, message = FALSE, warning = FALSE, error = FALSE}
 # Clean environment
-remove_objects <- c('commodity_split', 'pasta_df', 'sauce_df', 'pancake_df', 'syrup_df', 'size_stats', 'PASTA_SMALL', 'PASTA_REGULAR', 'SAUCE_SMALL', 'SAUCE_REGULAR', 'PANCAKE_SMALL', 'PANCAKE_REGULAR', 'SYRUP_SMALL', 'SYRUP_REGULAR')
+remove_objects <- c('commodity_split', 'pasta_df', 'sauce_df', 'pancake_df', 
+                    'syrup_df', 'size_stats', 'PASTA_SMALL', 'PASTA_REGULAR', 
+                    'SAUCE_SMALL', 'SAUCE_REGULAR', 'PANCAKE_SMALL', 
+                    'PANCAKE_REGULAR', 'SYRUP_SMALL', 'SYRUP_REGULAR')
 rm(list = ls()[ls() %in% remove_objects])
 ```
 
@@ -555,29 +657,42 @@ rm(list = ls()[ls() %in% remove_objects])
 
 **The final prep step is to join the data.** 
 
-I evaluated possible issues, then joined the dataframes, then cleaned up the joined data by renaming and reordering the columns
+I evaluated possible issues, then joined the dataframes, then cleaned up the 
+joined data by renaming and reordering the columns
 
 **Determine possible issues with joining**
 
 Transactions and Products are joined using 'upc'
 
-* There are `r transactions %>% anti_join(product) %>% tally()` transactions which are not associated with a product. I will not keep these unmatched transactions as they do not add value to my analysis on products/promotion links.
+* There are `r transactions %>% anti_join(product) %>% tally()` transactions 
+which are not associated with a product. I will not keep these unmatched 
+transactions as they do not add value to my analysis on products/promotion links.
 
-* There are `r product %>% anti_join(transactions) %>% tally()` products which are not associated with a transaction. I will also ignore these products (this will happen automatically by the join used). 
+* There are `r product %>% anti_join(transactions) %>% tally()` products which 
+are not associated with a transaction. I will also ignore these products (this 
+will happen automatically by the join used). 
 
 
 Transactions and Weekly Promotions are joined using 'upc', 'week', 'store', and 'geography'
 
-* There are `r transactions %>% anti_join(weekly) %>% tally()` transactions which are not associated with a weekly promotions. Many of these are because promotion information was not recorded before week 43. Because my focus is to evaluate the cases where I know the weekly promotion, I will remove all these unmatched transactions.  
+* There are `r transactions %>% anti_join(weekly) %>% tally()` transactions which 
+are not associated with a weekly promotions. Many of these are because promotion 
+information was not recorded before week 43. Because my focus is to evaluate the 
+cases where I know the weekly promotion, I will remove all these unmatched 
+transactions.  
 
-* There are `r weekly %>% anti_join(transactions) %>% tally()` weekly promotions which are not associated with a transaction. I will ignore these weeks (automatically by the format of the join).
+* There are `r weekly %>% anti_join(transactions) %>% tally()` weekly promotions 
+which are not associated with a transaction. I will ignore these weeks 
+(automatically by the format of the join).
 
 
 Transactions and Store are joined using 'store'
 
-* There are `r transactions %>% anti_join(store) %>% tally()` transactions which are not associated with a store. 
+* There are `r transactions %>% anti_join(store) %>% tally()` transactions 
+which are not associated with a store. 
 
-* There are `r store %>% anti_join(transactions) %>% tally()` stores which are not associated with a transaction. 
+* There are `r store %>% anti_join(transactions) %>% tally()` stores which are 
+not associated with a transaction. 
 
 
 **Join**
@@ -597,7 +712,8 @@ I renamed columns to be clear, shorter, and consistent.
 
 ```{r rename_clean, message = FALSE, warning = FALSE, error = FALSE}
 # Rename columns to be clear and consistent
-carbo <- rename(carbo, quantity = units, time = time_of_transaction, product_desc = product_description,
+carbo <- rename(carbo, quantity = units, time = time_of_transaction, 
+                product_desc = product_description,
                 ounces = product_size, store_zip = store_zip_code)
 ```
 
@@ -606,27 +722,33 @@ I reordered the columns.
 ```{r reorder_columns_clean, message = FALSE, warning = FALSE, error = FALSE}
 # Reorder columns
 carbo <- carbo %>%
-  select(household, week, feature_desc, display_desc, commodity, brand, product_attribute, 
-         ounces, product_size_factor, upc, product_desc, coupon, quantity, dollar_sales, 
-         day, time, basket, everything())
+  select(household, week, feature_desc, display_desc, commodity, brand, 
+         product_attribute, ounces, product_size_factor, upc, product_desc, 
+         coupon, quantity, dollar_sales, day, time, basket, everything())
 ```
 
 
 ### 3.5 Summary of Prepared Data
 
-In the cleaned dataset, each observation is a household's UPC from a specific day. This prepared dataset contains `r comma(dim(carbo)[1])` observations and `r dim(carbo)[2]` variables.
+In the cleaned dataset, each observation is a household's UPC from a specific 
+day. This prepared dataset contains `r comma(dim(carbo)[1])` observations and 
+`r dim(carbo)[2]` variables.
 
 **The key variables I will be looking at are:**
 
 * **commodity** - which has 4 values: `r unique(sort(carbo$commodity))`
 
-* **product_desc** - which is the name of the products. There are `r length(unique(carbo$product_desc))` products.
+* **product_desc** - which is the name of the products. There are 
+`r length(unique(carbo$product_desc))` products.
 
-* **product_attribute** - which is a keyword describing the product. There are `r length(unique(carbo$product_attribute))` attributes.
+* **product_attribute** - which is a keyword describing the product. There are 
+`r length(unique(carbo$product_attribute))` attributes.
 
-* **feature_desc** - 8 ordered levels describing weekly mailer: `r levels(carbo$feature_desc)`
+* **feature_desc** - 8 ordered levels describing weekly mailer: 
+`r levels(carbo$feature_desc)`
 
-* **display_desc** - 11 ordered levels describing in-store display: `r levels(carbo$display_desc)`
+* **display_desc** - 11 ordered levels describing in-store display: 
+`r levels(carbo$display_desc)`
 
 ```{r glimpse_clean, echo=FALSE, message = FALSE, warning = FALSE}
 glimpse(carbo)
@@ -634,7 +756,7 @@ glimpse(carbo)
 
 **The first 500 observations**
 
-```{r, datatable_clean, echo=FALSE, message = FALSE, warning = FALSE, error = FALSE}
+```{r, table_clean, echo=FALSE, message = FALSE, warning = FALSE, error = FALSE}
 # First 500 rows of the cleaned data
 datatable(head(carbo, 500))
 ```
@@ -658,11 +780,20 @@ carbo <- carbo_backup
 
 ### 4.1 Promotion Types And Sales
 
-First I looked at the frequency of promotion types and resulting sales by commodity and attribute. 
+First I looked at the frequency of promotion types and resulting sales by 
+commodity and attribute. 
 
 **Promotion Type Pairings**
 
-I looked at the paired promotions (meaning promoted in both mailer and in-store displays). A blank cell indicates that commodity has never been promoted in that combination. For example, pastas that are displayed in the seasonal aisle have never been part of the weekly mailer wrap. Pancakes have appeared on the front of the weekly mailer wrap, as intertior page and back page features, but otherwise are absent from weekly mailers. Similarly, syrups are mostly absent from weekly mailers but when they do appear in the mailer it is never on the front, but only on the back of the wrap.  I see that pasta and sauces are more commonly promoted across all categories of in-store displays and weekly mailer.
+I looked at the paired promotions (meaning promoted in both mailer and in-store 
+displays). A blank cell indicates that commodity has never been promoted in that 
+combination. For example, pastas that are displayed in the seasonal aisle have 
+never been part of the weekly mailer wrap. Pancakes have appeared on the front 
+of the weekly mailer wrap, as intertior page and back page features, but 
+otherwise are absent from weekly mailers. Similarly, syrups are mostly absent 
+from weekly mailers but when they do appear in the mailer it is never on the 
+front, but only on the back of the wrap.  I see that pasta and sauces are more 
+commonly promoted across all categories of in-store displays and weekly mailer.
 
 
 ```{r most_frequent_promoted, message = FALSE, warning = FALSE, error = FALSE}
@@ -681,7 +812,8 @@ carbo %>%
 
 **Promotion Sales Frequency**
 
-I now look at how frequently the promoted items resulted in a sale, measured by the number of shopping baskets.  
+I now look at how frequently the promoted items resulted in a sale, measured by 
+the number of shopping baskets.  
 
 ```{r function_frequency_promo, message = FALSE, warning = FALSE, error = FALSE}
 # Function: promotion frequency
@@ -703,22 +835,35 @@ plot_promotion_frequency <- function(column, axis_label) {
 
 First I looked at in-store display promotions that results in sales. 
 
-Most of the pastas and sauces sold were not displayed in an in-store promotion. Those that were promoted were typically in rear or front endcaps or in-shelf promotions. The least frequent sales were side-aisle endcaps and store rear/front. It would be worth evaluating if that is because those promotions are more rare, or just less successful. 
+Most of the pastas and sauces sold were not displayed in an in-store promotion. 
+Those that were promoted were typically in rear or front endcaps or in-shelf 
+promotions. The least frequent sales were side-aisle endcaps and store rear/front. 
+It would be worth evaluating if that is because those promotions are more rare, 
+or just less successful. 
 
 
-Pancakes/syrups overall appear in less baskets than the pastas/sauces. However, in-shelf promotions and secondary location displays are proportionally more successful for pancakes/syrups than for pastas/sauces. 
+Pancakes/syrups overall appear in less baskets than the pastas/sauces. However, 
+in-shelf promotions and secondary location displays are proportionally more 
+successful for pancakes/syrups than for pastas/sauces. 
 
 
 ```{r call_function_display, message = FALSE, warning = FALSE, error = FALSE}
 # Call function for display desc
-plot_promotion_frequency(column = 'display_desc', axis_label = 'In-Store Display Promotion')
+plot_promotion_frequency(column = 'display_desc', 
+                         axis_label = 'In-Store Display Promotion')
 ```
 
 Next I looked at weekly mailer promtions that resulted in sales.
 
-For pastas/sauces, the interior page feature resulted in the most sales, which is not surprising since that is where most products are promoted. For sauces, a front page feature seems be a significant boost above other categories. Surprisingly, wraps are more successful if featured in the interior rather than the exterior. 
+For pastas/sauces, the interior page feature resulted in the most sales, 
+which is not surprising since that is where most products are promoted. For 
+sauces, a front page feature seems be a significant boost above other categories. 
+Surprisingly, wraps are more successful if featured in the interior rather 
+than the exterior. 
 
-While pancakes/syrups are featured less, it is surprising that the most items sold were not featured. Pancakes are most successful as a back page feature or front wrap. Syrups are most successful as an interior page feature. 
+While pancakes/syrups are featured less, it is surprising that the most items 
+sold were not featured. Pancakes are most successful as a back page feature or 
+front wrap. Syrups are most successful as an interior page feature. 
 
 ```{r call_function_feature, message = FALSE, warning = FALSE, error = FALSE}
 # Call function for feature frequency
@@ -728,15 +873,20 @@ plot_promotion_frequency(column = 'feature_desc', axis_label = 'Weekly Mailer Pr
 **Promotion Attributes**
 
 
-I now look at the variable "product attribute". I created this variable from product descriptions in order to compare like products. I now looked at the 15 most frequently identified product attributes, measured by the number of baskets. 
+I now look at the variable "product attribute". I created this variable from 
+product descriptions in order to compare like products. I now looked at the 15 
+most frequently identified product attributes, measured by the number of baskets. 
 
 
-Attributes describing the sauces are the most frequent. Pastas are the second most frequent. Pancakes only have one attribute that is frequent (maple) and syrup only has two (maple and lite).   
+Attributes describing the sauces are the most frequent. Pastas are the second 
+most frequent. Pancakes only have one attribute that is frequent (maple) and 
+syrup only has two (maple and lite).   
 
-```{r most_frequent_product_attribute, message = FALSE, warning = FALSE, error = FALSE}
+```{r most_freq_product_attribute, message = FALSE, warning = FALSE, error = FALSE}
 # Most frequent sold products identified by  attributes
 carbo %>%
-  mutate(new_attribute = fct_lump(product_attribute, n = 15, other_level = 'all other attributes')) %>%
+  mutate(new_attribute = fct_lump(product_attribute, n = 15, 
+                                  other_level = 'all other attributes')) %>%
   ggplot(aes(fct_rev(fct_infreq(new_attribute)), fill = commodity)) +
   geom_bar() +
   theme_bw() +
@@ -749,9 +899,10 @@ carbo %>%
   coord_flip()
 ```
 
-Because it encompasses the most mentioned attributes, I dig further into the Sauce commodity. Vegetable and mushroom sauces have the most sales.  
+Because it encompasses the most mentioned attributes, I dig further into the 
+Sauce commodity. Vegetable and mushroom sauces have the most sales.  
 
-```{r function_plot_attribute_frequency, message = FALSE, warning = FALSE, error = FALSE}
+```{r function_plot_attribute_freq, message = FALSE, warning = FALSE, error = FALSE}
 # Most frequent sold products identified by  attributes
 
 plot_attribute_frequency <- function(column, legend_text) {
@@ -771,32 +922,46 @@ plot_attribute_frequency <- function(column, legend_text) {
 ```
 
 
-By coloring the chart by weekly mailer promotions, I also see that sauce products which are promoted in-store represent a large chunk of the sales. I also see rear end cap is significant. 
+By coloring the chart by weekly mailer promotions, I also see that sauce products 
+which are promoted in-store represent a large chunk of the sales. I also see rear 
+end cap is significant. 
 
 ```{r call_attribute_display, message = FALSE, warning = FALSE, error = FALSE}
 # Call function to plot attributes for display_desc
-plot_attribute_frequency(column = 'display_desc', legend_text = 'In-Store Display Promotion')
+plot_attribute_frequency(column = 'display_desc', 
+                         legend_text = 'In-Store Display Promotion')
 ```
-By coloring the chart by in-store display promotions, I see that sauce products promoted in the interior and front page of the mailers have the largest influence. These results seem to hold for all attributes.
+By coloring the chart by in-store display promotions, I see that sauce products 
+promoted in the interior and front page of the mailers have the largest influence. 
+These results seem to hold for all attributes.
 
-```{r call_attribute_feature, message = FALSE, warning = FALSE, error = FALSE}
+```{r call_att_feature, message = FALSE, warning = FALSE, error = FALSE}
 # Call function to plot attributes for feature_desc
-plot_attribute_frequency(column = 'feature_desc', legend_text = 'Weekly Mailer Promotion')
+plot_attribute_frequency(column = 'feature_desc', 
+                         legend_text = 'Weekly Mailer Promotion')
 ```
 
 
 ### 4.2 Clustering Products
 
-Next I aggregated the product information, segmented these products into groups with hierarchical clustering model, and then analyzed what differentiates the resulting clusters. 
+Next I aggregated the product information, segmented these products into groups 
+with hierarchical clustering model, and then analyzed what differentiates the 
+resulting clusters. 
 
 **Aggregating to Product Grain**
 
-Exploratory Data Analysis involves slicing the data to view it from different angles. The initial dataframe was organized as each row represents one UPC per basket per household. I rearranged the data so that one row represents one product over the entire period. I did this by summarizing the quantity of sales, number baskets, number weeks, number stores, by each product (upc). This is referred to as "aligning the grain" and I aligned the grain to product.
+Exploratory Data Analysis involves slicing the data to view it from different 
+angles. The initial dataframe was organized as each row represents one UPC per 
+basket per household. I rearranged the data so that one row represents one 
+product over the entire period. I did this by summarizing the quantity of sales, 
+number baskets, number weeks, number stores, by each product (upc). This is 
+referred to as "aligning the grain" and I aligned the grain to product.
 
 ```{r create_carbo_product, message = FALSE, warning = FALSE, error = FALSE}
 # Creating new dataframe at product grain with each row a different upc
 carbo_product = carbo %>%
-                group_by(upc, commodity, brand, product_attribute, product_size_factor, product_desc) %>%
+                group_by(upc, commodity, brand, product_attribute, 
+                         product_size_factor, product_desc) %>%
                 summarize(num_households = n_distinct(household), 
                   percent_coupons = mean(coupon), 
                   total_quantity = sum(quantity), 
@@ -813,7 +978,8 @@ carbo_product = carbo %>%
                   )
 ```
 
-I counted the number of times a product was in each level of the weekly mailers and in-store displays. 
+I counted the number of times a product was in each level of the weekly mailers 
+and in-store displays. 
 
 ```{r count_feature_and_display, message = FALSE, warning = FALSE, error = FALSE}
 # Count feature descriptions
@@ -856,7 +1022,9 @@ rm(carbo_product1)
 ```
 
 
-I convert all characters and factors to numeric for modeling. This numeric dataframe is called carbo_product_numbers but I also keep the original carbo_product dataframe in order to preserve the categorical names which I will later use. 
+I convert all characters and factors to numeric for modeling. This numeric 
+dataframe is called carbo_product_numbers but I also keep the original carbo_product 
+dataframe in order to preserve the categorical names which I will later use. 
 
 ```{r convert_product_to_numeric, message = FALSE, warning = FALSE, error = FALSE}
 # Convert to numbers for modeling
@@ -865,27 +1033,49 @@ carbo_product_numbers <- carbo_product %>%
   mutate_if(is.factor, as.numeric)
 ```
 
-This new dataset, aligned to the product grain, contains `r dim(carbo_product)[1]` observations and `r dim(carbo_product)[2]` variables.
+This new dataset, aligned to the product grain, contains `r dim(carbo_product)[1]` 
+observations and `r dim(carbo_product)[2]` variables.
 
 **Modeling With Hierarchical Clustering**
 
-I then analyzed this newly created product-grain dataframe, by grouping like products together using a clustering algorithm. Clustering is a type of "unsupervised" learning in that we do not have a specific target we are predicting (such as sales volume). Instead the model is fit by measuring "distances" between variables. Observations are divided into meaningful groups that share common characteristics. These cluster members are similar to one another, and distinctly different from others outside the cluster. 
+I then analyzed this newly created product-grain dataframe, by grouping like 
+products together using a clustering algorithm. Clustering is a type of "unsupervised" 
+learning in that we do not have a specific target we are predicting (such as sales 
+volume). Instead the model is fit by measuring "distances" between variables. 
+Observations are divided into meaningful groups that share common characteristics. 
+These cluster members are similar to one another, and distinctly different from 
+others outside the cluster. 
 
-The inputs to the model are the variables of interest in numeric format, a way to measure distance, and the number of clusters desired. 
+The inputs to the model are the variables of interest in numeric format, a way 
+to measure distance, and the number of clusters desired. 
 
-For the distance, I picked jiccard distance which is used for categorical data. I calculated the distance between each point using the function dist() with method "binary". Then I create a linkage with the hierarchical cluster function hclust() and method "complete" (which calculates maximum distance). 
+For the distance, I picked jiccard distance which is used for categorical data. 
+I calculated the distance between each point using the function dist() with method 
+"binary". Then I create a linkage with the hierarchical cluster function hclust() 
+and method "complete" (which calculates maximum distance). 
 
 ```{r calculate_distance, message = FALSE, warning = FALSE, error = FALSE}
 # Calculate distance
-dist_carbo <- dist(carbo_product_numbers, method = 'binary') #jiccard distance used for categorical
+dist_carbo <- dist(carbo_product_numbers, method = 'binary') #jiccard distance
 hc_carbo <- hclust(dist_carbo, method = 'complete') #linkage
 ```
 
 
-There are many ways we can use to decide the optimum number of clusters (k). We can use domain expertise to just pick a number for k, or we can assign observations to a cluster and then calculate distances using silhouette width or plot the distances using dendrograms. 
+There are many ways we can use to decide the optimum number of clusters (k). 
+We can use domain expertise to just pick a number for k, or we can assign 
+observations to a cluster and then calculate distances using silhouette width 
+or plot the distances using dendrograms. 
 
 
-The silhouette width calculates how similar (close in distance) each observation is with the cluster it is assigned, relative to other clusters. The plots shows the average silhouette width of all observations within a cluster, at different k values. A silhouette width of 1 indicates the observation is well matched to the current cluster, 0 indicates it is in-between clusters, and -1 indicates it should be assigned to a different cluster.  We want the average silhouette width to be as close to 1 as possible. With our data, using 2 clusters has an average silhouette width of almost .8 which is really good. In contrast, if we use 8 clusters, our average silhouette width is close to 0 which means it is a poor assignment. 
+The silhouette width calculates how similar (close in distance) each observation 
+is with the cluster it is assigned, relative to other clusters. The plots shows 
+the average silhouette width of all observations within a cluster, at different 
+k values. A silhouette width of 1 indicates the observation is well matched to 
+the current cluster, 0 indicates it is in-between clusters, and -1 indicates it 
+should be assigned to a different cluster.  We want the average silhouette width 
+to be as close to 1 as possible. With our data, using 2 clusters has an average 
+silhouette width of almost .8 which is really good. In contrast, if we use 8 
+clusters, our average silhouette width is close to 0 which means it is a poor assignment. 
 
 ```{r best_num_clusters, message = FALSE, warning = FALSE, error = FALSE}
 # Silhouette width comparing K
@@ -908,7 +1098,12 @@ scale_x_continuous(breaks = 2:10)
 
 
 
-We can also visualze the optimal number of clusters with a dendrogram, where the height of each branch is determined by linkage and distance decisions we made during clustering. The x-axis plots observations. Because there are so many observations, the labels are hard to read but the guide on the bottom shows the distribution of the 400 observations. I plotted 2, 3, and 7 clusters. By comparing, we can see that adding more clusters results in some very narrow clusters.
+We can also visualze the optimal number of clusters with a dendrogram, where the 
+height of each branch is determined by linkage and distance decisions we made 
+during clustering. The x-axis plots observations. Because there are so many 
+observations, the labels are hard to read but the guide on the bottom shows the 
+distribution of the 400 observations. I plotted 2, 3, and 7 clusters. By 
+comparing, we can see that adding more clusters results in some very narrow clusters.
 
 ```{r plot_color_dendrogram, message = FALSE, warning = FALSE, error = FALSE}
 # Color dendrogram to show cluster height
@@ -947,7 +1142,9 @@ grid.arrange(p1, p2, p3, ncol = 3)
 **Analyze the Model Clusters**
 
 
-Despite both methods suggesting 2 clusters, I decide to use 3 clusters. My reason is that I would like to contrast the clusters and there would be more meaningful information comparing 3 groups. 
+Despite both methods suggesting 2 clusters, I decide to use 3 clusters. My reason 
+is that I would like to contrast the clusters and there would be more meaningful 
+information comparing 3 groups. 
 
 ```{r fit_cluster_model, message = FALSE, warning = FALSE, error = FALSE}
 # Fitting model and append cluster number
@@ -955,7 +1152,11 @@ cluster_assignment <- cutree(hc_carbo, k = 3) #extract cluster assignment
 carbo_product$cluster = cluster_assignment #append assignment to original dataframe
 ```
 
-It's hard to visualize clusters with more than two variables. But we can use summary statistics to build a narrative of what makes the observations similar to each other within the cluster while different from observations in other clusters. Each row is a different cluster and the columns are summary statistics for that cluster. 
+It's hard to visualize clusters with more than two variables. But we can use 
+summary statistics to build a narrative of what makes the observations similar 
+to each other within the cluster while different from observations in other 
+clusters. Each row is a different cluster and the columns are summary statistics 
+for that cluster. 
 
 ```{r cluster_stats, message = FALSE, warning = FALSE, error = FALSE}
 # Statistics on clustered
@@ -967,25 +1168,39 @@ clustered_stats <- carbo_product %>%
 datatable(clustered_stats)
 ```
 
-Cluster 1 is small, but differentiates from the other clusters in that it appears to be the least influenced by the weekly mailers. In fact there were 0 sales from some weekly mailer feature categories (wrap front, back page, and interior line item). They also visited the fewest stores for the fewest number of weeks. This is not a group that is motivated to visit the store from weekly promotions.
+Cluster 1 is small, but differentiates from the other clusters in that it appears 
+to be the least influenced by the weekly mailers. In fact there were 0 sales 
+from some weekly mailer feature categories (wrap front, back page, and interior 
+line item). They also visited the fewest stores for the fewest number of weeks. 
+This is not a group that is motivated to visit the store from weekly promotions.
 
-Cluster 2 is the largest cluster and also appears to be the most influenced to purchase items in the weekly mailers. They buy in higher quantities and for the longest period (stretching from week 47 to week 100). Whereas the other two clusters averaged 0 and 1.1 sales resulting from wrap front, this group averaged 70 from the wrap front and 37 from the wrap back. It would be worth looking further into what motivates this group in order to focus our promotion campaigns. 
+Cluster 2 is the largest cluster and also appears to be the most influenced to 
+purchase items in the weekly mailers. They buy in higher quantities and for the 
+longest period (stretching from week 47 to week 100). Whereas the other two 
+clusters averaged 0 and 1.1 sales resulting from wrap front, this group averaged 
+70 from the wrap front and 37 from the wrap back. It would be worth looking further 
+into what motivates this group in order to focus our promotion campaigns. 
 
-Cluster 3 is between the other two in terms of influence by mailers and displays, but they purchase a higher percent of items with coupons. It's interesting that they aren't as influenced as cluster 2 by the mailers because responding to mailers and collecting coupons both reflect coming to the store with an incentive to purchase. Also interesting is that they also do not seem influencd by store displays. It could be this group purchases what they came for but not much extra.
+Cluster 3 is between the other two in terms of influence by mailers and displays, 
+but they purchase a higher percent of items with coupons. It's interesting that 
+they aren't as influenced as cluster 2 by the mailers because responding to 
+mailers and collecting coupons both reflect coming to the store with an incentive 
+to purchase. Also interesting is that they also do not seem influencd by store 
+displays. It could be this group purchases what they came for but not much extra.
 
 Here's the Product-Grain table showing the cluster assignments.
 
-```{r table_with_cluster_assignments, echo = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+```{r table_cluster_assig, echo = FALSE, message = FALSE, warning = FALSE, error = FALSE}
 # Product-grain dataframe with cluster assignment
 datatable(carbo_product %>%
   select(cluster, everything()) %>%
   arrange(cluster) )
 ```
 
-```{r clean_product_group_environment, message = FALSE, warning = FALSE, error = FALSE}
+```{r clean_product_environment, message = FALSE, warning = FALSE, error = FALSE}
 # Clean environment
-remove_objects <- c('cluster_assignment', 'carbo_product_numbered', 'hc_carbo', 'dend_colored', 
-                    'dend_clustered', 'clustered_stats', 'sil_df')
+remove_objects <- c('cluster_assignment', 'carbo_product_numbered', 'hc_carbo', 
+                    'dend_colored', 'dend_clustered', 'clustered_stats', 'sil_df')
 rm(list = ls()[ls() %in% remove_objects])
 ```
 
@@ -994,26 +1209,66 @@ rm(list = ls()[ls() %in% remove_objects])
 
 
 ### Business Question Addressed
-My goal was to analyze how weekly mailers and in-store displays connect with sales for carbohydrate products. I looked at promotion types and resulting sales plus I segmented products into clusters and analyzed what differentiated the clusters. 
+My goal was to analyze how weekly mailers and in-store displays connect with 
+sales for carbohydrate products. I looked at promotion types and resulting sales 
+plus I segmented products into clusters and analyzed what differentiated the 
+clusters. 
 
 ### Insights and Implications 
 
 **Connection between promotions types and sales**
 
-Regarding pastas and sauces, I was surprised to see that being featured on the wrap of weekly mailers does little to drive sales. In fact the most effective promotions were on rear end caps for in-store promotions and as interior features in weekly mailers. Both of these were surprising as I thought more prominence (front page, front of store, outside of mailer wrap) would result in more sales. It was also surprising to see the how much more common regular spaghetti and thin spaghetter were over other pastas and how vegetable and mushroom sauces dominated the sales. 
+Regarding pastas and sauces, I was surprised to see that being featured on the 
+wrap of weekly mailers does little to drive sales. In fact the most effective 
+promotions were on rear end caps for in-store promotions and as interior features 
+in weekly mailers. Both of these were surprising as I thought more prominence 
+(front page, front of store, outside of mailer wrap) would result in more sales. 
+It was also surprising to see the how much more common regular spaghetti and thin 
+spaghetti were over other pastas and how vegetable and mushroom sauces dominated 
+the sales. 
 
-I also found that the current promotion of pancake mixes and syrups did not result in many sales. These promotions were most effective on the back or interior pages of weekly mailers and secondary locations within the store. The most common attribute was maple for the mixes and maple/lite for the syrups. 
+I also found that the current promotion of pancake mixes and syrups did not 
+result in many sales. These promotions were most effective on the back or 
+interior pages of weekly mailers and secondary locations within the store. 
+The most common attribute was maple for the mixes and maple/lite for the syrups. 
 
-I see two implications. First, I would continue promoting pastas and sauces in less prominent locations of the mailers and in the rear end caps of the stores. These have been effective in generating sales, and leaves premium space to promote other products in commodities where you may want to boost sales or entice customers into the store. Second, I would promote a diversified product line for pancakes and syrups. The current promotions are driving "maple" sales, but those sales are low. I suggest a strategy to use the wrap or back page (where these commodities have been most effective) to promote unique products (such as boysenberry syrups or buckwheat pancakes) to potentially boost sales by generating interest in substitute products. I would place these products in secondary locations of the store where customers are currently looking for pancakes and syrups, but draw attention to them. 
+I see two implications. First, I would continue promoting pastas and sauces in 
+less prominent locations of the mailers and in the rear end caps of the stores. 
+These have been effective in generating sales, and leaves premium space to promote 
+other products in commodities where you may want to boost sales or entice 
+customers into the store. Second, I would promote a diversified product line 
+for pancakes and syrups. The current promotions are driving "maple" sales, but 
+those sales are low. I suggest a strategy to use the wrap or back page (where 
+these commodities have been most effective) to promote unique products (such as 
+boysenberry syrups or buckwheat pancakes) to potentially boost sales by generating 
+interest in substitute products. I would place these products in secondary 
+locations of the store where customers are currently looking for pancakes and 
+syrups, but draw attention to them. 
 
 **Differentiating products wIth clustering**
 
-By clustering the products, we identified three distinct groups. An interesting insight was how the model defined the groups. A very large group was created that bought in higher quantities and responded to promotions. But one cluster appears to not be influences by promotions. Another cluster appears to not respond to mailer or display promotions but to use coupons in higher proportions. 
+By clustering the products, we identified three distinct groups. An interesting 
+insight was how the model defined the groups. A very large group was created that 
+bought in higher quantities and responded to promotions. But one cluster appears 
+to not be influences by promotions. Another cluster appears to not respond to 
+mailer or display promotions but to use coupons in higher proportions. 
 
-An implication is to look further into the cluster that uses coupons to see what types of products they are purchasing and why they are not responding to the other promotion types as frequently. 
+An implication is to look further into the cluster that uses coupons to see what 
+types of products they are purchasing and why they are not responding to the 
+other promotion types as frequently. 
 
 ### Limitations
 
-A limitation of the study is the limited variety of promotion campaigns. An extension of this analysis could include the impact of additional ways of engaging with customers, such as through other grocery marketing channels and digital ads across the web. Another extension could look at the specifics of coupons redeemed as to whether they were a result of customer specific mailers, general vendor coupons (such as from the Sunday paper), or digital coupons from the Kroger app.
+A limitation of the study is the limited variety of promotion campaigns. An 
+extension of this analysis could include the impact of additional ways of 
+engaging with customers, such as through other Kroger marketing channels and 
+digital ads across the web. Another extension could look at the specifics of 
+coupons redeemed as to whether they were a result of customer specific mailers, 
+general vendor coupons (such as from the Sunday paper), or digital coupons 
+from the Kroger app.
 
-Another limitation of the study is the stratificatoin of households in the sample. The data could be redrawn in a way to better reflect the purchaing of a consumer over the entire time period so we could classify specific consumer sales uplift as a result of promotions. The current data does not have enough baskets per consumer to justify this type of analysis. 
+Another limitation of the study is the stratificatoin of households in the sample. 
+The data could be redrawn in a way to better reflect the purchaing of a consumer 
+over the entire time period so we could classify specific consumer sales uplift 
+as a result of promotions. The current data does not have enough baskets per 
+consumer to justify this type of analysis. 
