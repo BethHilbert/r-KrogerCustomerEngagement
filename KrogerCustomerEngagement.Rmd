@@ -11,15 +11,22 @@ output:
 ## 1 Introduction
 
 ### Business Question
-My goal is analyze how weekly mailers and in-store displays correlate with sales for carbohydrate products. I will measure the success of a promotion by the number of shopping baskets that include the product. 
+My goal is analyze how weekly mailers and in-store displays correlate with sales 
+for carbohydrate products. I will measure the success of a promotion by the number 
+of shopping baskets that include the product. 
 
 ### Plan
-I will use the Carbo_Loading  [dataset](http://uc-r.github.io/data_wrangling/final-project) provided by 84.51. 
+I will use the Carbo_Loading  [dataset](http://uc-r.github.io/data_wrangling/final-project) 
+provided by 84.51. 
 
-The important fields I will use are feature description (describing weekly mailers), display description (describing in-store promo displays), attribute (a field I created for grouping products such as maple, macaroni, alfredo), and commodity (pasta, sauce, pancake, syrup). 
+The important fields I will use are feature description (describing weekly mailers), 
+display description (describing in-store promo displays), attribute (a field I created 
+for grouping products such as maple, macaroni, alfredo), and commodity (pasta, sauce, 
+pancake, syrup). 
 
 
-I will look at the data two ways. First I will look at promotion types and resulting sales by commodity and attribute. Then I will aggregate the product information, segment these products into groups with a hierarchical clustering model, and analyze what differentiates the resulting clusters.
+I will look at the data two ways. First I will look at promotion types and resulting 
+sales by commodity and attribute. Then I will aggregate the product information, segment these products into groups with a hierarchical clustering model, and analyze what differentiates the resulting clusters.
 
 ### Benefit
 The benefit of the analysis will be to see whether certain combinations of products and promotions are more effective in producing sales. By understanding the types of promotions in which products are effective and the clusters which are most affected by promotions, we can improve the customer experience and drive business results.
