@@ -1,19 +1,18 @@
 # Kroger Customer Engagement
 
-To analyze how promotion affects future customer engagement. Customer engagement will be measured by subsequent purchases of the product. I am using R and a dataset provided by 84.51. November 2018. 
+I analyzed how weekly mailers and in-store displays correlate with sales. I used R and hierarchical clustering with a dataset provided by 84.51. December 2018. 
 
-This project is in process and will be finished December 2018. 
 
 
 Dataset
 --------------------
-I will use the Carbo_Loading dataset provided by 84.51. The [data](http://uc-r.github.io/data_wrangling/final-project) is a subset of 4 potentially related product commodities (pasta/sauce, pancake mix/syrup) including their sales and weekly promotion. Promotions are identified by location in flyer of ads, in-store display, and coupons. 
+I used the Carbo_Loading dataset provided by 84.51. The [data](http://uc-r.github.io/data_wrangling/final-project) is a subset of 4 potentially related product commodities (pasta/sauce, pancake mix/syrup) including their sales and weekly promotion. Promotions are identified by location in weekly mailer, in-store display, and coupons redeemed. 
 
 
 
 Process
 --------------------
-The original dataset includes 5,197,681 transactions, the grain is one row per household per UPC per day.  There are 927 products with their associated promotion campaigns (ads and in store displays) over a 2 year period.
+The original dataset includes 5,197,681 transactions, the grain is one row per household per UPC per day.  There are 927 products with their associated promotion campaigns (ads and in store displays) over a 2 year period. First looked at promotion types and resulting sales by commodity and attribute. Then I aggregate the product information, segment these products into groups with a hierarchical clustering model, and analyze what differentiates the resulting clusters. 
 
 
 Links
