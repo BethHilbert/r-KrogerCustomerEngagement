@@ -21,15 +21,14 @@ In Spring 2019 I expanded my analysis, adding models for random forest, associat
 
 Links
 --------------------
-RPubs (knit version, Dec 2018): http://rpubs.com/Beth_Hilbert/446290
+Code (April 2019): https://github.com/BethHilbert/r-KrogerCustomerEngagement/blob/master/KrogerCarboPromotions(april2019).R
 
-Code (Dec 2018): https://github.com/BethHilbert/r-KrogerCustomerEngagement/blob/master/KrogerCustomerEngagement.Rmd
+Slide Presentation (April 2019): 
 
 Tableau dashboard (April 2019): https://public.tableau.com/profile/beth.hilbert#!/vizhome/KrogerCarboPromotions/StoryNewProduct
 
-Code (April 2019): 
+RPubs (knit version, Dec 2018): http://rpubs.com/Beth_Hilbert/446290
 
-Slide Presentation (April 2019):
-
+Code (Dec 2018): https://github.com/BethHilbert/r-KrogerCustomerEngagement/blob/master/KrogerCustomerEngagement(dec2018).Rmd
 
 Note: This is a different project than Kroger Case with which my team won the 84.51 Competition in September 2018. I cannot upload that project to Github as it was live data and proprietary information. 
