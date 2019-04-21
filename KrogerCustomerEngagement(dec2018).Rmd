@@ -16,7 +16,7 @@ for carbohydrate products. I will measure the success of a promotion by the numb
 of shopping baskets that include the product. 
 
 ### Plan
-I will use the Carbo_Loading [dataset](http://uc-r.github.io/data_wrangling/final-project) provided by 84.51. 
+I will use the Carbo_Loading [dataset](http://8451.com/area51) provided by 84.51. 
 
 The important fields I will use are feature description (describing weekly mailers), 
 display description (describing in-store promo displays), attribute (a field I 
@@ -74,7 +74,7 @@ Loading Tidyverse loads a collection of data science packages. From Tidyverse I 
 
 **The first prep step is to understand the source of the data.**  I will use the 
 Carbo_Loading dataset provided by 84.51. The 
-[data](http://uc-r.github.io/data_wrangling/final-project) 
+[data](http://8451.com/area51) 
 is a subset of four potentially related product commodities (pasta/sauce, 
 pancake mix/syrup), capturing their sales and weekly promotions. Promotions are 
 identified by location in weekly mailer, location of in-store display, and 
