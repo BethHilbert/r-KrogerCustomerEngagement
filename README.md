@@ -23,7 +23,7 @@ Links
 --------------------
 Code (April 2019): https://github.com/BethHilbert/r-KrogerCustomerEngagement/blob/master/KrogerCarboPromotions(april2019).R
 
-Presentation (April 2019): https://github.com/BethHilbert/r-KrogerCustomerEngagement/blob/master/KrogerCarboPromotionsSlides.pdf
+Presentation (April 2019): https://github.com/BethHilbert/r-KrogerCustomerEngagement/blob/master/KrogerCarboPromotionsSlides(april2019).pdf
 
 Tableau dashboard (April 2019): https://public.tableau.com/profile/beth.hilbert#!/vizhome/KrogerCarboPromotions/StoryNewProduct
 
